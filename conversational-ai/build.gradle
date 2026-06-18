@@ -1,0 +1,239 @@
+import groovy.json.JsonSlurper
+import org.gradle.api.publish.maven.MavenPublication
+import java.net.HttpURLConnection
+import java.net.URI
+import java.net.URLEncoder
+import java.util.Base64
+
+plugins {
+    alias(libs.plugins.android.library)
+    alias(libs.plugins.kotlin.android)
+    id 'maven-publish'
+    id 'signing'
+}
+
+def convoAiApiVersionProps = new Properties()
+def convoAiApiVersionFile = rootProject.file("lib/version.properties")
+if (convoAiApiVersionFile.exists()) {
+    convoAiApiVersionFile.withInputStream { stream ->
+        convoAiApiVersionProps.load(stream)
+    }
+}
+
+def publishedGroupId = "io.github.agoraio-conversational-ai"
+def publishedArtifactId = "agora-agent-client-toolkit"
+def moduleVersion = convoAiApiVersionProps.getProperty("CONVOAI_API_VERSION") ?: "0.1.0-SNAPSHOT"
+def centralUsername = findProperty("centralUsername") ?: System.getenv("CENTRAL_TOKEN_USERNAME")
+def centralPassword = findProperty("centralPassword") ?: System.getenv("CENTRAL_TOKEN_PASSWORD")
+def centralNamespace = findProperty("centralNamespace") ?: System.getenv("CENTRAL_NAMESPACE") ?: publishedGroupId
+def centralRepositoryKey = findProperty("centralRepositoryKey") ?: System.getenv("CENTRAL_REPOSITORY_KEY")
+
+group = publishedGroupId
+version = findProperty("CONVOAI_API_VERSION") ?: System.getenv("CONVOAI_API_VERSION") ?: moduleVersion
+
+android {
+    namespace 'io.agora.conversational.api'
+    compileSdk rootProject.ext.compileSdkVersion
+
+    defaultConfig {
+        minSdk rootProject.ext.minSdkVersion
+        consumerProguardFiles "consumer-rules.pro"
+        testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+
+    kotlinOptions {
+        jvmTarget = '17'
+    }
+}
+
+def androidJavadocsJar = tasks.register("androidJavadocsJar", Jar) {
+    archiveBaseName.set(publishedArtifactId)
+    archiveClassifier.set("javadoc")
+    from(projectDir) {
+        include "README.md"
+    }
+}
+
+def androidSourcesJar = tasks.register("androidSourcesJar", Jar) {
+    archiveBaseName.set(publishedArtifactId)
+    archiveClassifier.set("sources")
+    from("src/main/java")
+    from("src/main/kotlin")
+}
+
+tasks.withType(Jar).configureEach {
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+}
+
+tasks.withType(org.gradle.api.publish.tasks.GenerateModuleMetadata).configureEach {
+    dependsOn(androidSourcesJar, androidJavadocsJar)
+}
+
+tasks.withType(org.gradle.api.publish.maven.tasks.GenerateMavenPom).configureEach {
+    dependsOn(androidSourcesJar, androidJavadocsJar)
+}
+
+tasks.matching { it.name == "releaseSourcesJar" }.configureEach {
+    enabled = false
+}
+
+publishing {
+    repositories {
+        maven {
+            name = "sonatypeCentral"
+            url = uri("https://ossrh-staging-api.central.sonatype.com/service/local/staging/deploy/maven2/")
+            credentials {
+                username = centralUsername
+                password = centralPassword
+            }
+        }
+    }
+}
+
+def notifyCentralPortal = tasks.register("notifyCentralPortal") {
+    group = "publishing"
+    description = "Notify Sonatype Central Portal after upload via the OSSRH staging API compatibility endpoint."
+    dependsOn("publishReleasePublicationToSonatypeCentralRepository")
+
+    doLast {
+        if (!centralUsername || !centralPassword) {
+            throw new GradleException("Missing Sonatype Central credentials. Set centralUsername/centralPassword or CENTRAL_TOKEN_USERNAME/CENTRAL_TOKEN_PASSWORD.")
+        }
+        if (!centralNamespace) {
+            throw new GradleException("Missing Central namespace. Set centralNamespace or CENTRAL_NAMESPACE.")
+        }
+
+        def authToken = Base64.encoder.encodeToString("${centralUsername}:${centralPassword}".getBytes("UTF-8"))
+        def repositoryKey = centralRepositoryKey
+
+        if (!repositoryKey) {
+            def profileId = URLEncoder.encode(centralNamespace, "UTF-8")
+            def searchUrl = new URI("https://ossrh-staging-api.central.sonatype.com/manual/search/repositories?ip=any&profile_id=${profileId}").toURL()
+            def searchConnection = (HttpURLConnection) searchUrl.openConnection()
+            searchConnection.requestMethod = "GET"
+            searchConnection.setRequestProperty("Authorization", "Bearer ${authToken}")
+            searchConnection.connect()
+
+            def searchStatusCode = searchConnection.responseCode
+            def searchResponseStream = searchStatusCode >= 400 ? searchConnection.errorStream : searchConnection.inputStream
+            def searchResponseBody = searchResponseStream?.getText("UTF-8") ?: ""
+            logger.lifecycle("Central repository search response: HTTP ${searchStatusCode}${searchResponseBody ? " - ${searchResponseBody}" : ""}")
+
+            if (searchStatusCode < 200 || searchStatusCode >= 300) {
+                throw new GradleException("Central repository search failed with HTTP ${searchStatusCode}. ${searchResponseBody}")
+            }
+
+            def searchResult = new JsonSlurper().parseText(searchResponseBody ?: '{"repositories":[]}')
+            def repositories = (searchResult.repositories ?: []) as List
+            def openRepositories = repositories.findAll { repo ->
+                "${repo.state}".equalsIgnoreCase("open")
+            }
+
+            if (openRepositories.isEmpty()) {
+                throw new GradleException("No open Central repositories found for namespace ${centralNamespace}. Search response: ${searchResponseBody}")
+            }
+
+            if (openRepositories.size() > 1) {
+                def keys = openRepositories.collect { it.key }.join(", ")
+                throw new GradleException("Multiple open Central repositories found for namespace ${centralNamespace}: ${keys}. Set centralRepositoryKey/CENTRAL_REPOSITORY_KEY to disambiguate.")
+            }
+
+            repositoryKey = "${openRepositories.first().key}"
+            logger.lifecycle("Selected Central repository key: ${repositoryKey}")
+        } else {
+            logger.lifecycle("Using provided Central repository key override: ${repositoryKey}")
+        }
+
+        def notifyUrl = new URI("https://ossrh-staging-api.central.sonatype.com/manual/upload/repository/${repositoryKey}?publishing_type=automatic").toURL()
+        def connection = (HttpURLConnection) notifyUrl.openConnection()
+        connection.requestMethod = "POST"
+        connection.setRequestProperty("Authorization", "Bearer ${authToken}")
+        connection.doOutput = true
+        connection.connect()
+
+        def statusCode = connection.responseCode
+        def responseStream = statusCode >= 400 ? connection.errorStream : connection.inputStream
+        def responseBody = responseStream?.getText("UTF-8") ?: ""
+        logger.lifecycle("Central Portal notify response: HTTP ${statusCode}${responseBody ? " - ${responseBody}" : ""}")
+
+        if (statusCode < 200 || statusCode >= 300) {
+            throw new GradleException("Central Portal notify failed with HTTP ${statusCode}. ${responseBody}")
+        }
+    }
+}
+
+tasks.register("publishToMavenCentral") {
+    group = "publishing"
+    description = "Upload the release publication to Sonatype Central and notify the Central Portal."
+    dependsOn(notifyCentralPortal)
+}
+
+afterEvaluate {
+    publishing {
+        publications {
+            create("release", MavenPublication) {
+                from components.release
+                artifactId = publishedArtifactId
+                artifact androidSourcesJar
+                artifact androidJavadocsJar
+
+                pom {
+                    name = "Agora Agent Client Toolkit"
+                    description = "Standalone Android library for Agora conversational AI messaging and transcript rendering."
+                    url = "https://github.com/AgoraIO-Community/conversational-ai-quickstart-native"
+
+                    licenses {
+                        license {
+                            name = "MIT License"
+                            url = "http://www.opensource.org/licenses/mit-license.php"
+                            distribution = "repo"
+                        }
+                    }
+
+                    developers {
+                        developer {
+                            id = "agoraio"
+                            name = "AgoraIO Community"
+                            url = "https://github.com/AgoraIO-Community"
+                        }
+                    }
+
+                    scm {
+                        url = "https://github.com/AgoraIO-Community/conversational-ai-quickstart-native"
+                        connection = "scm:git:https://github.com/AgoraIO-Community/conversational-ai-quickstart-native.git"
+                        developerConnection = "scm:git:ssh://git@github.com/AgoraIO-Community/conversational-ai-quickstart-native.git"
+                    }
+                }
+            }
+        }
+    }
+
+    signing {
+        useGpgCmd()
+        sign publishing.publications.release
+    }
+}
+
+dependencies {
+    compileOnly libs.agora.rtc.full
+    compileOnly libs.agora.rtm.lite
+
+    implementation libs.kotlinx.coroutines.android
+    implementation libs.gson
+
+    testImplementation libs.junit
+    androidTestImplementation libs.androidx.junit
+    androidTestImplementation libs.androidx.espresso.core
+}
