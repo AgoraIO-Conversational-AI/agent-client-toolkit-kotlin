@@ -1,123 +1,218 @@
 # Conversational AI Android Library
 
-This module contains the standalone Android library prepared for Maven Central release.
+Standalone Android library for consuming Agora Conversational AI RTM events and rendering conversation state in your app.
 
 Module directory:
 
 - `conversational-ai/`
 
-Exported packages:
+Package namespace:
 
 - `io.agora.conversational.api.*`
 - `io.agora.conversational.api.transcript.*`
 
-Not included in this library:
+## Installation
 
-- demo-only stream-message subtitle implementation previously used by `subRender/v1`
-
-## Published Coordinates
-
-Release coordinates:
+Use the published Maven artifact:
 
 ```groovy
-implementation 'io.github.agoraio-conversational-ai:agora-agent-client-toolkit:<version>'
+dependencies {
+    implementation 'io.agora.agents:agora-agent-client-toolkit:<version>'
+}
 ```
 
-## Dependency Model
-
-This library keeps Agora RTC and RTM as `compileOnly` dependencies on purpose.
-
-Why:
-
-- the host app is expected to already integrate Agora RTC/RTM
-- the host app owns RTC initialization, RTM login state, and lifecycle management
-- the library consumes existing `RtcEngine` and `RtmClient` instances through `ConversationalAIAPIConfig`
-- the generated AAR does not bundle RTC/RTM transitively
-
-Because of that, consumers must add RTC and RTM dependencies themselves:
+This library expects the host app to provide Agora RTC and RTM SDK instances. Add those dependencies in your app:
 
 ```groovy
 dependencies {
     implementation 'io.agora.rtc:full-sdk:4.5.1'
-    implementation 'io.agora:agora-rtm:2.2.3'
+    implementation 'io.agora:agora-rtm-lite:2.2.6'
 }
 ```
 
-Before creating `ConversationalAIAPIImpl`, make sure:
+## Dependency Model
 
-- RTC is initialized and available
-- RTM is logged in
-- those RTC/RTM instances outlive the lifecycle of this library component
+The library keeps Agora RTC and RTM as `compileOnly` dependencies.
 
-## Maven Central Prerequisites
+The host app owns:
 
-Before the first real release, prepare:
+- RTC engine creation and lifecycle
+- RTM client creation, login, and logout
+- token generation and renewal
+- joining and leaving RTC channels
+- starting and stopping the Conversational AI agent
 
-1. A verified Sonatype Central Portal namespace: `io.github.agoraio-conversational-ai`
-2. A Central Portal publishing token
-3. A local GPG keyring available to `gpg` / `gpg-agent`
-4. A non-`SNAPSHOT` release version
+The library consumes existing `RtcEngine` and `RtmClient` instances through `ConversationalAIAPIConfig`, subscribes to RTM message channels, parses agent events, and emits callbacks for UI/business logic.
 
-Recommended local Gradle configuration:
+The published AAR declares a low `minCompileSdk` so apps on Android Gradle Plugin 9 can consume it without needing to match this project's `compileSdk`. RTC and RTM are not bundled in this artifact; if your app uses AGP 9, make sure the Agora RTC/RTM versions you choose are also AGP 9 compatible.
 
-`~/.gradle/gradle.properties`
+## Core API
 
-```properties
-centralUsername=...
-centralPassword=...
-centralNamespace=io.github.agoraio-conversational-ai
-# Optional, only use when multiple open repositories need manual disambiguation:
-# centralRepositoryKey=...
-signing.gnupg.keyName=...
-# Optional, defaults are usually enough:
-# signing.gnupg.executable=gpg
-# signing.gnupg.useLegacyGpg=false
-# signing.gnupg.homeDir=/Users/your-name/.gnupg
-# signing.gnupg.passphrase=...
+Create an API instance with existing RTC and RTM objects:
+
+```kotlin
+val conversationalAIAPI = ConversationalAIAPIImpl(
+    ConversationalAIAPIConfig(
+        rtcEngine = rtcEngine,
+        rtmClient = rtmClient,
+        renderMode = TranscriptRenderMode.Word,
+        enableLog = true
+    )
+)
 ```
 
-Notes:
+Register callbacks:
 
-- `useGpgCmd()` uses your local `gpg` / `gpg-agent`, so you no longer need `signingKey`, `signingKeyId`, or `signingPassword` in project properties
-- CI runners should preload the GPG keyring; do not store the private key itself in CI secrets
-- if `signing.gnupg.passphrase` is omitted, Gradle will ask `gpg-agent` for the passphrase
-- `centralNamespace` defaults to `io.github.agoraio-conversational-ai`; only override it if your Central namespace changes
-- `publishToMavenCentral` now searches Central for the unique `open` repository under your namespace, then calls `upload/repository/<key>` automatically
-- if you ever have multiple `open` repositories, set `centralRepositoryKey` temporarily to the exact repository key returned by Sonatype
-- do not commit tokens or private keys into the repository
-- the default version is defined in `lib/version.properties` with the key `CONVOAI_API_VERSION`
-- `CONVOAI_API_VERSION` can be overridden with `-PCONVOAI_API_VERSION=<version>` or the `CONVOAI_API_VERSION` environment variable
+```kotlin
+val handler = object : IConversationalAIAPIEventHandler {
+    override fun onAgentStateChanged(agentUserId: String, event: StateChangeEvent) {
+        // Update agent state UI.
+    }
 
-## Central Release Flow
+    override fun onAgentInterrupted(agentUserId: String, event: InterruptEvent) {
+        // Handle interruption.
+    }
 
-1. Update `lib/version.properties` or pass `-PCONVOAI_API_VERSION=<release>`.
-2. Verify the local publication first:
+    override fun onAgentMetrics(agentUserId: String, metric: Metric) {
+        // Observe module latency metrics.
+    }
 
-```bash
-gpg --list-secret-keys --keyid-format LONG
-./gradlew :conversational-ai:publishReleasePublicationToMavenLocal
+    override fun onTurnFinished(agentUserId: String, turn: Turn) {
+        // Observe completed-turn latency.
+    }
+
+    override fun onAgentError(agentUserId: String, error: ModuleError) {
+        // Handle agent-side errors.
+    }
+
+    override fun onMessageError(agentUserId: String, error: MessageError) {
+        // Handle message errors.
+    }
+
+    override fun onMessageReceiptUpdated(agentUserId: String, receipt: MessageReceipt) {
+        // Handle message receipts.
+    }
+
+    override fun onAgentVoiceprintStateChanged(
+        agentUserId: String,
+        event: VoiceprintStateChangeEvent
+    ) {
+        // Handle voiceprint state changes.
+    }
+
+    override fun onTranscriptUpdated(agentUserId: String, transcript: Transcript) {
+        // Render user or agent transcript.
+    }
+
+    override fun onDebugLog(log: String) {
+        // Forward debug logs if needed.
+    }
+}
+
+conversationalAIAPI.addHandler(handler)
 ```
 
-3. Run the single release command:
+## Audio Settings
 
-```bash
-./gradlew :conversational-ai:publishToMavenCentral
+Call `loadAudioSettings()` before every `RtcEngine.joinChannel()` call.
+
+```kotlin
+conversationalAIAPI.loadAudioSettings(Constants.AUDIO_SCENARIO_AI_CLIENT)
+rtcEngine.joinChannel(token, channelName, uid, channelOptions)
 ```
 
-This task will:
+For Avatar mode, use `Constants.AUDIO_SCENARIO_DEFAULT`.
 
-- upload `release` artifacts to Sonatype Central's OSSRH Staging API compatibility endpoint
-- search `manual/search/repositories?ip=any&profile_id=<namespace>` automatically after upload
-- call `manual/upload/repository/<key>?publishing_type=automatic` for the unique `open` repository
-- fail fast if Central credentials are missing
+## Subscribe to Agent Events
 
-4. Check the deployment result in the Central Portal UI.
+After the host app has joined RTC and logged in to RTM, subscribe to the RTM message channel:
 
-## What This Module Publishes
+```kotlin
+conversationalAIAPI.subscribeMessage(channelName) { error ->
+    if (error != null) {
+        // Handle ConversationalAIAPIError.
+        return@subscribeMessage
+    }
 
-The Gradle configuration is prepared to upload:
+    // Now start the agent through your app/backend flow.
+}
+```
 
-- release `.aar`
-- generated `-sources.jar`
-- placeholder `-javadoc.jar` containing this module README, which satisfies Central validation
-- signed publication files through local `gpg/gpg-agent`
+When the session ends, unsubscribe and release resources:
+
+```kotlin
+conversationalAIAPI.unsubscribeMessage(channelName) { error ->
+    // Leave RTC and continue cleanup.
+}
+
+conversationalAIAPI.removeHandler(handler)
+conversationalAIAPI.destroy()
+```
+
+## Optional Messages
+
+The library can send text or image messages to an agent through RTM point-to-point messages.
+
+```kotlin
+conversationalAIAPI.chat(
+    agentUserId,
+    TextMessage(
+        priority = Priority.INTERRUPT,
+        responseInterruptable = true,
+        text = "Hello"
+    )
+) { error ->
+    // error is null on success.
+}
+```
+
+```kotlin
+conversationalAIAPI.chat(
+    agentUserId,
+    ImageMessage(
+        uuid = "image-1",
+        imageUrl = "https://example.com/image.jpg"
+    )
+) { error ->
+    // error is null on success.
+}
+```
+
+Use `imageUrl` for large images. `imageBase64` must stay within RTM message size limits.
+
+You can also interrupt the agent:
+
+```kotlin
+conversationalAIAPI.interrupt(agentUserId) { error ->
+    // error is null on success.
+}
+```
+
+## Important Types
+
+| Type | Purpose |
+|------|---------|
+| `ConversationalAIAPIConfig` | Supplies `RtcEngine`, `RtmClient`, transcript render mode, and logging options |
+| `IConversationalAIAPI` | Main API for handlers, subscription, chat, interrupt, audio settings, and destroy |
+| `IConversationalAIAPIEventHandler` | Main callback interface for agent state, transcripts, errors, metrics, and receipts |
+| `Transcript` | UI-ready transcript payload with turn ID, user ID, text, status, type, and render mode |
+| `AgentState` | Agent lifecycle state: `IDLE`, `SILENT`, `LISTENING`, `THINKING`, `SPEAKING`, `UNKNOWN` |
+| `ConversationalAIAPIError` | Error wrapper for RTM, RTC, and unknown failures |
+
+## Transcript Rendering
+
+`TranscriptRenderMode.Word` renders word-level transcripts when the server provides word timestamps. If word-level data is unavailable and fallback is enabled, the library falls back to `TranscriptRenderMode.Text`.
+
+`onTranscriptUpdated()` may be called frequently. If your UI stores a transcript list, deduplicate or update by `turnId` and `type`.
+
+## Lifecycle Checklist
+
+1. Create and configure RTC engine.
+2. Create RTM client and log in.
+3. Create `ConversationalAIAPIImpl`.
+4. Call `loadAudioSettings()` before `joinChannel()`.
+5. Join RTC.
+6. Call `subscribeMessage(channelName)`.
+7. Start the Conversational AI agent through your app/backend flow.
+8. Render callbacks from `IConversationalAIAPIEventHandler`.
+9. On exit, call `unsubscribeMessage()`, leave RTC, remove handlers, and call `destroy()`.

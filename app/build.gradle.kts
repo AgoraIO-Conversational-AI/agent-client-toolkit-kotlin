@@ -97,8 +97,9 @@ android {
 }
 
 dependencies {
-    implementation(project(":conversational-ai"))
+//    implementation(project(":conversational-ai"))
 //    implementation libs.conversation.ai
+    implementation("io.agora.agents:agora-agent-client-toolkit:1.0.0")
 
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.appcompat)

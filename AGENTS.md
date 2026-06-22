@@ -226,8 +226,51 @@ To modify request parameters: edit `buildJsonPayload()` in `AgentStarter.kt`.
 4. **Token Generation**: `TokenGenerator.kt` is Demo-only; production must use your own server
 5. **Resource Cleanup**: RTC/RTM resources fully released in `hangup()` and `onCleared()`; ConversationalAIAPI released via `destroy()`
 6. **Permissions**: Requires `RECORD_AUDIO` and `INTERNET` permissions
-7. **ConversationalAIAPI is read-only**: All files under the `:conversational-ai` module (`conversational-ai/src/main/java/io/agora/conversational/api/`) are standalone components — **do not modify directly**. The module is published to Maven Central as a reusable library; the app depends on it via `implementation(project(":conversational-ai"))`. See `conversational-ai/README.md` for usage.
+7. **ConversationalAIAPI is read-only**: All files under the `:conversational-ai` module (`conversational-ai/src/main/java/io/agora/conversational/api/`) are standalone components — **do not modify directly**. The module is packaged for Rehoboam Maven / AAR release as a reusable library; the app depends on it via `implementation(project(":conversational-ai"))`. See `conversational-ai/README.md` for developer-facing API usage.
 8. **Audio Settings**: `loadAudioSettings()` must be called before `joinChannel()`; Avatar mode uses `AUDIO_SCENARIO_DEFAULT`
+
+## Internal Maven Release
+
+Rehoboam is the internal Maven / AAR release platform. Do not document Rehoboam, Jenkins download URLs, or internal release requests in public-facing README files.
+
+The public `conversational-ai/README.md` should describe developer-facing API usage only.
+
+To prepare the Rehoboam upload zip:
+
+```bash
+./gradlew :conversational-ai:packageMavenReleaseZip
+```
+
+The generated zip is:
+
+```text
+conversational-ai/build/distributions/agora-agent-client-toolkit-<version>-maven-release.zip
+```
+
+The zip contains:
+
+```text
+agora-agent-client-toolkit/
+├── agora-agent-client-toolkit-<version>.pom
+├── agora-agent-client-toolkit-<version>.aar
+├── agora-agent-client-toolkit-<version>-sources.jar
+└── agora-agent-client-toolkit-<version>-javadoc.jar
+```
+
+Rehoboam form values for this single-AAR module:
+
+| Field | Value |
+|-------|-------|
+| `Release Channel` | `Maven / AAR` |
+| `Group ID` | `io.agora.agents` |
+| `Artifacts Version` | Same as `lib/version.properties` / `CONVOAI_API_VERSION` |
+| `File Link / File URL` | Jenkins-accessible URL for the generated zip |
+| `Part Release List / SO_LIST` | Empty for full release |
+| `Subspec Publish` | Off |
+
+Rehoboam uses the POM `groupId` as an Android manifest package in its `aar-template` validation flow, so the group ID must be a valid Java package name. Keep the public Maven coordinate in `conversational-ai/README.md` as `io.agora.agents:agora-agent-client-toolkit`.
+
+This project does not need `.target` files unless it is changed into Rehoboam multi-module target publishing.
 
 ## File Naming
 
