@@ -14,6 +14,9 @@ if (convoAiApiVersionFile.exists()) {
 
 def publishedGroupId = "io.agora.agents"
 def publishedArtifactId = "agora-agent-client-toolkit"
+def projectUrl = "https://github.com/AgoraIO-Conversational-AI/agent-client-toolkit-kotlin"
+def scmUrl = "https://github.com/AgoraIO-Conversational-AI/agent-client-toolkit-kotlin.git"
+def scmDeveloperUrl = "ssh://git@github.com/AgoraIO-Conversational-AI/agent-client-toolkit-kotlin.git"
 def rehoboamGroupId = findProperty("REHOBOAM_GROUP_ID") ?: System.getenv("REHOBOAM_GROUP_ID") ?: publishedGroupId
 def consumerMinCompileSdk = (findProperty("CONVOAI_API_MIN_COMPILE_SDK") ?: System.getenv("CONVOAI_API_MIN_COMPILE_SDK") ?: rootProject.ext.minSdkVersion).toString().toInteger()
 def moduleVersion = convoAiApiVersionProps.getProperty("CONVOAI_API_VERSION") ?: "0.1.0-SNAPSHOT"
@@ -137,6 +140,13 @@ afterEvaluate {
                 pom {
                     name = "Agora Agent Client Toolkit"
                     description = "Standalone Android library for Agora conversational AI messaging and transcript rendering."
+                    url = projectUrl
+
+                    scm {
+                        url = projectUrl
+                        connection = "scm:git:${scmUrl}"
+                        developerConnection = "scm:git:${scmDeveloperUrl}"
+                    }
 
                     licenses {
                         license {
