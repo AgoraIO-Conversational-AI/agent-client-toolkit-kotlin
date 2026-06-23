@@ -1,115 +1,86 @@
-# Conversational AI Quickstart — Android Kotlin
+# Agora Conversational AI Toolkit for Android
 
-## Overview
+A client-side Android toolkit for adding Agora Conversational AI features to apps already using Agora RTC and RTM. The library consumes existing RTC/RTM instances, adds agent state tracking, transcript parsing, and RTM-based messaging controls, and leaves token generation plus agent startup ownership to the host app.
 
-This sample shows how to integrate Agora Conversational AI into an Android app for real-time voice conversation with an AI agent.
+## Install
 
-It demonstrates:
+Add the Maven repositories and the Conversational AI toolkit dependency:
 
-- real-time audio interaction through Agora RTC
-- message and state synchronization through Agora RTM
-- live transcript rendering for user and agent turns
-- connection, agent, mute, and transcript state management
-- automatic RTC join, RTM login, and agent startup flow
-- a single-page UI with logs, status, transcripts, and controls
+```kotlin
+repositories {
+    google()
+    mavenCentral()
+}
 
-## Use Cases
+dependencies {
+    implementation("io.agora.agents:agora-agent-client-toolkit:<version>")
+}
+```
 
-- AI voice customer support
-- voice assistant apps
-- real-time voice transcription
-- voice-enabled games
-- interactive education or training apps
+The toolkit expects the host app to provide Agora RTC and RTM SDK instances:
 
-## Prerequisites
-
-- Android SDK API level 26 or later
-- Agora developer account: [Console](https://console.shengwang.cn/)
-- RTM enabled in the Agora Console
-- Agora App ID and App Certificate
+```kotlin
+dependencies {
+    implementation("io.agora.rtc:full-sdk:4.5.1")
+    implementation("io.agora:agora-rtm-lite:2.2.6")
+}
+```
 
 ## Quick Start
 
-### 1. Clone the project
+Create the toolkit API with your existing RTC engine and RTM client:
 
-```bash
-git clone https://github.com/AgoraIO-Community/conversational-ai-quickstart-native.git
-cd conversational-ai-quickstart-native/android-kotlin
+```kotlin
+val conversationalAIAPI = ConversationalAIAPIImpl(
+    ConversationalAIAPIConfig(
+        rtcEngine = rtcEngine,
+        rtmClient = rtmClient,
+        renderMode = TranscriptRenderMode.Word,
+        enableLog = true
+    )
+)
 ```
 
-### 2. Configure the Android project
+Register event callbacks:
 
-Open the project in Android Studio.
+```kotlin
+conversationalAIAPI.addHandler(object : IConversationalAIAPIEventHandler {
+    override fun onAgentStateChanged(agentUserId: String, event: StateChangeEvent) {
+        // Render agent state.
+    }
 
-Copy `env.example.properties` to `env.properties`:
+    override fun onTranscriptUpdated(agentUserId: String, transcript: Transcript) {
+        // Render user or agent transcript.
+    }
 
-```bash
-cp env.example.properties env.properties
+    override fun onAgentError(agentUserId: String, error: ModuleError) {
+        // Handle agent-side errors.
+    }
+})
 ```
 
-Fill in your Agora credentials:
+Load audio settings before joining RTC, then subscribe to the RTM message channel after RTC/RTM are ready:
 
-```properties
-APP_ID=your_agora_app_id
-APP_CERTIFICATE=your_agora_app_certificate
+```kotlin
+conversationalAIAPI.loadAudioSettings(Constants.AUDIO_SCENARIO_AI_CLIENT)
+rtcEngine.joinChannel(token, channelName, uid, channelOptions)
+
+conversationalAIAPI.subscribeMessage(channelName) { error ->
+    if (error != null) {
+        // Handle ConversationalAIAPIError.
+        return@subscribeMessage
+    }
+
+    // Start the Conversational AI agent through your app or backend flow.
+}
 ```
 
-Configuration fields:
+See [conversational-ai/README.md](./conversational-ai/README.md) for the full component API guide.
 
-- `APP_ID`: required Agora App ID
-- `APP_CERTIFICATE`: required App Certificate for token generation and REST API authentication
+## Maintainers
 
-The current RESTful startup request only needs Agora project credentials. LLM and TTS are no longer configured from the client request, so no third-party keys are required.
-
-`AgentStarter.buildJsonPayload()` currently uses:
-
-- ASR preset: `deepgram_nova_3`
-
-Before using the Conversational AI engine, create an Agora project and enable the Conversational AI service in the Agora Console. See [Enable service](https://doc.shengwang.cn/doc/convoai/restful/get-started/enable-service).
-
-Notes:
-
-- `env.properties` contains sensitive values and must not be committed.
-- Each app launch generates a random channel name in the format `channel_kotlin_<6-digit-random>`.
-- `TokenGenerator.kt` is demo-only. Production apps must generate tokens from a backend service.
-- The build currently validates only `APP_ID` and `APP_CERTIFICATE`.
-
-Wait for Gradle sync to finish after configuration.
-
-### 3. Start the agent
-
-No extra setup is required for the demo flow. The Android app directly calls the Agora RESTful API to start the agent.
-
-Requirements:
-
-- `APP_ID` and `APP_CERTIFICATE` must be configured in `env.properties`.
-
-This mode is intended for:
-
-- quick evaluation
-- feature verification
-- local development without an additional backend
-
-Important:
-
-- This client-side flow is for demo and development only. It is not recommended for production.
-- `APP_CERTIFICATE` is packaged into the client and sent to the demo token service, so it can leak.
-
-Production requirements:
-
-- Store sensitive values such as `appCertificate` on your backend.
-- Let the client request tokens from your backend.
-- Let the client request agent startup through your backend, and have the backend call the Agora RESTful API.
-- See `../server-python/agora_http_server.py` for a reference backend implementation.
-
-## Key Files
-
-- `AgentChatActivity.kt`: main screen with logs, agent status, transcript bubbles, and control buttons
-- `AgentChatViewModel.kt`: business logic for RTC, RTM, token generation, agent startup, and UI state
-- `AgentStarter.kt`: agent start/stop REST API wrapper using `Authorization: agora token=<token>`
-- `TokenGenerator.kt`: demo-only token generator; production must use a backend
-- `io/agora/convoai/convoaiApi/`: Agora ConversationalAIAPI wrapper; do not modify directly
+For Maven / AAR packaging, see [docs/publishing.md](./docs/publishing.md).
 
 ## License
 
-See [LICENSE](./LICENSE).
+MIT

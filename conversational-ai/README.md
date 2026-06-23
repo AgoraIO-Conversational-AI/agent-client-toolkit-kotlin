@@ -1,38 +1,21 @@
-# Conversational AI Android Library
+# agora-agent-client-toolkit
 
-Standalone Android library for consuming Agora Conversational AI RTM events and rendering conversation state in your app.
+Android library for consuming Agora Conversational AI RTM events, tracking agent state, rendering transcripts, and sending RTM-based messages to an agent.
 
-Module directory:
+The library is designed to sit on top of an app's existing Agora RTC and RTM setup. It does not create RTC/RTM clients, generate tokens, join RTC channels, or start the Conversational AI agent.
 
-- `conversational-ai/`
+## Install
 
-Package namespace:
+See the root [README.md](../README.md) for Maven dependency setup.
 
-- `io.agora.conversational.api.*`
-- `io.agora.conversational.api.transcript.*`
+## Prerequisites
 
-## Installation
-
-Use the published Maven artifact:
-
-```groovy
-dependencies {
-    implementation 'io.agora.agents:agora-agent-client-toolkit:<version>'
-}
-```
-
-This library expects the host app to provide Agora RTC and RTM SDK instances. Add those dependencies in your app:
-
-```groovy
-dependencies {
-    implementation 'io.agora.rtc:full-sdk:4.5.1'
-    implementation 'io.agora:agora-rtm-lite:2.2.6'
-}
-```
-
-## Dependency Model
-
-The library keeps Agora RTC and RTM as `compileOnly` dependencies.
+| Requirement | Version |
+|-------------|---------|
+| Android minSdk | 26+ |
+| Agora RTC SDK | `io.agora.rtc:full-sdk:4.5.1` |
+| Agora RTM SDK | `io.agora:agora-rtm-lite:2.2.6` |
+| Kotlin | 2.0.21 |
 
 The host app owns:
 
@@ -42,13 +25,7 @@ The host app owns:
 - joining and leaving RTC channels
 - starting and stopping the Conversational AI agent
 
-The library consumes existing `RtcEngine` and `RtmClient` instances through `ConversationalAIAPIConfig`, subscribes to RTM message channels, parses agent events, and emits callbacks for UI/business logic.
-
-The published AAR declares a low `minCompileSdk` so apps on Android Gradle Plugin 9 can consume it without needing to match this project's `compileSdk`. RTC and RTM are not bundled in this artifact; if your app uses AGP 9, make sure the Agora RTC/RTM versions you choose are also AGP 9 compatible.
-
-## Core API
-
-Create an API instance with existing RTC and RTM objects:
+## Quick Start
 
 ```kotlin
 val conversationalAIAPI = ConversationalAIAPIImpl(
@@ -59,14 +36,10 @@ val conversationalAIAPI = ConversationalAIAPIImpl(
         enableLog = true
     )
 )
-```
 
-Register callbacks:
-
-```kotlin
 val handler = object : IConversationalAIAPIEventHandler {
     override fun onAgentStateChanged(agentUserId: String, event: StateChangeEvent) {
-        // Update agent state UI.
+        // Render agent state.
     }
 
     override fun onAgentInterrupted(agentUserId: String, event: InterruptEvent) {
@@ -110,48 +83,114 @@ val handler = object : IConversationalAIAPIEventHandler {
 }
 
 conversationalAIAPI.addHandler(handler)
-```
 
-## Audio Settings
-
-Call `loadAudioSettings()` before every `RtcEngine.joinChannel()` call.
-
-```kotlin
 conversationalAIAPI.loadAudioSettings(Constants.AUDIO_SCENARIO_AI_CLIENT)
 rtcEngine.joinChannel(token, channelName, uid, channelOptions)
-```
 
-For Avatar mode, use `Constants.AUDIO_SCENARIO_DEFAULT`.
-
-## Subscribe to Agent Events
-
-After the host app has joined RTC and logged in to RTM, subscribe to the RTM message channel:
-
-```kotlin
 conversationalAIAPI.subscribeMessage(channelName) { error ->
     if (error != null) {
         // Handle ConversationalAIAPIError.
         return@subscribeMessage
     }
 
-    // Now start the agent through your app/backend flow.
+    // Start the Conversational AI agent through your app or backend flow.
 }
 ```
 
-When the session ends, unsubscribe and release resources:
+## Configuration Reference
+
+`ConversationalAIAPIConfig` fields:
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `rtcEngine` | `RtcEngine` | Yes | Existing Agora RTC engine owned by the host app |
+| `rtmClient` | `RtmClient` | Yes | Existing Agora RTM client owned by the host app |
+| `renderMode` | `TranscriptRenderMode` | No | `Word` or `Text`; defaults to `Word` |
+| `enableLog` | `Boolean` | No | Enables toolkit logs written through the RTC SDK log path; defaults to `true` |
+| `enableRenderModeFallback` | `Boolean` | No | Falls back from `Word` to `Text` when word-level transcript data is unavailable; defaults to `true` |
+
+## API Reference
+
+### `ConversationalAIAPIImpl`
+
+Create an instance with `ConversationalAIAPIConfig`:
 
 ```kotlin
-conversationalAIAPI.unsubscribeMessage(channelName) { error ->
-    // Leave RTC and continue cleanup.
-}
-
-conversationalAIAPI.removeHandler(handler)
-conversationalAIAPI.destroy()
+val api: IConversationalAIAPI = ConversationalAIAPIImpl(config)
 ```
 
-## Optional Messages
+### `IConversationalAIAPI`
 
-The library can send text or image messages to an agent through RTM point-to-point messages.
+```kotlin
+fun addHandler(handler: IConversationalAIAPIEventHandler)
+fun removeHandler(handler: IConversationalAIAPIEventHandler)
+fun subscribeMessage(channelName: String, completion: (ConversationalAIAPIError?) -> Unit)
+fun unsubscribeMessage(channelName: String, completion: (ConversationalAIAPIError?) -> Unit)
+fun chat(agentUserId: String, message: ChatMessage, completion: (ConversationalAIAPIError?) -> Unit)
+fun interrupt(agentUserId: String, completion: (ConversationalAIAPIError?) -> Unit)
+fun loadAudioSettings(scenario: Int = Constants.AUDIO_SCENARIO_AI_CLIENT)
+fun destroy()
+```
+
+`loadAudioSettings()` must be called before every `RtcEngine.joinChannel()` call.
+
+For Avatar mode, use:
+
+```kotlin
+conversationalAIAPI.loadAudioSettings(Constants.AUDIO_SCENARIO_DEFAULT)
+```
+
+For standard voice mode, use:
+
+```kotlin
+conversationalAIAPI.loadAudioSettings(Constants.AUDIO_SCENARIO_AI_CLIENT)
+```
+
+## Events
+
+Implement `IConversationalAIAPIEventHandler` to receive callbacks.
+
+| Callback | Payload | Description |
+|----------|---------|-------------|
+| `onAgentStateChanged` | `StateChangeEvent` | Agent lifecycle state changed |
+| `onAgentListeningChanged` | `Boolean` | Convenience callback for listening state |
+| `onAgentThinkingChanged` | `Boolean` | Convenience callback for thinking state |
+| `onAgentSpeakingChanged` | `Boolean` | Convenience callback for speaking state |
+| `onAgentInterrupted` | `InterruptEvent` | Agent turn was interrupted |
+| `onAgentMetrics` | `Metric` | Module latency or performance metric |
+| `onTurnFinished` | `Turn` | Completed-turn latency data |
+| `onAgentError` | `ModuleError` | Agent module error |
+| `onMessageError` | `MessageError` | Chat message delivery or processing error |
+| `onMessageReceiptUpdated` | `MessageReceipt` | Chat message receipt update |
+| `onAgentVoiceprintStateChanged` | `VoiceprintStateChangeEvent` | Voiceprint status update |
+| `onTranscriptUpdated` | `Transcript` | User or agent transcript update |
+| `onDebugLog` | `String` | Toolkit debug log |
+
+Some events require corresponding fields in the agent start request:
+
+| Event | Required agent start parameter |
+|-------|--------------------------------|
+| Agent state and message events | `advanced_features.enable_rtm: true` and `parameters.data_channel: "rtm"` |
+| Agent metrics | `parameters.enable_metrics: true` |
+| Agent errors | `parameters.enable_error_message: true` |
+
+## Transcript Rendering
+
+`TranscriptRenderMode.Word` renders word-level transcripts when the server provides word timing data. If word-level data is unavailable and `enableRenderModeFallback` is `true`, the library falls back to `TranscriptRenderMode.Text`.
+
+`onTranscriptUpdated()` may be called frequently. If your UI stores a transcript list, deduplicate or update by `turnId` and `type`.
+
+Important transcript types:
+
+| Type | Values |
+|------|--------|
+| `TranscriptRenderMode` | `Word`, `Text` |
+| `TranscriptType` | `AGENT`, `USER` |
+| `TranscriptStatus` | `IN_PROGRESS`, `END`, `INTERRUPTED`, `UNKNOWN` |
+
+## Sending Messages
+
+Send text:
 
 ```kotlin
 conversationalAIAPI.chat(
@@ -165,6 +204,8 @@ conversationalAIAPI.chat(
     // error is null on success.
 }
 ```
+
+Send image:
 
 ```kotlin
 conversationalAIAPI.chat(
@@ -180,7 +221,7 @@ conversationalAIAPI.chat(
 
 Use `imageUrl` for large images. `imageBase64` must stay within RTM message size limits.
 
-You can also interrupt the agent:
+Interrupt the agent:
 
 ```kotlin
 conversationalAIAPI.interrupt(agentUserId) { error ->
@@ -194,25 +235,61 @@ conversationalAIAPI.interrupt(agentUserId) { error ->
 |------|---------|
 | `ConversationalAIAPIConfig` | Supplies `RtcEngine`, `RtmClient`, transcript render mode, and logging options |
 | `IConversationalAIAPI` | Main API for handlers, subscription, chat, interrupt, audio settings, and destroy |
-| `IConversationalAIAPIEventHandler` | Main callback interface for agent state, transcripts, errors, metrics, and receipts |
+| `IConversationalAIAPIEventHandler` | Main callback interface for state, transcripts, errors, metrics, receipts, and debug logs |
 | `Transcript` | UI-ready transcript payload with turn ID, user ID, text, status, type, and render mode |
 | `AgentState` | Agent lifecycle state: `IDLE`, `SILENT`, `LISTENING`, `THINKING`, `SPEAKING`, `UNKNOWN` |
 | `ConversationalAIAPIError` | Error wrapper for RTM, RTC, and unknown failures |
-
-## Transcript Rendering
-
-`TranscriptRenderMode.Word` renders word-level transcripts when the server provides word timestamps. If word-level data is unavailable and fallback is enabled, the library falls back to `TranscriptRenderMode.Text`.
-
-`onTranscriptUpdated()` may be called frequently. If your UI stores a transcript list, deduplicate or update by `turnId` and `type`.
+| `Priority` | Chat priority: `INTERRUPT`, `APPEND`, `IGNORE` |
 
 ## Lifecycle Checklist
 
-1. Create and configure RTC engine.
-2. Create RTM client and log in.
+1. Create and configure `RtcEngine`.
+2. Create and log in `RtmClient`.
 3. Create `ConversationalAIAPIImpl`.
-4. Call `loadAudioSettings()` before `joinChannel()`.
-5. Join RTC.
-6. Call `subscribeMessage(channelName)`.
-7. Start the Conversational AI agent through your app/backend flow.
-8. Render callbacks from `IConversationalAIAPIEventHandler`.
-9. On exit, call `unsubscribeMessage()`, leave RTC, remove handlers, and call `destroy()`.
+4. Register `IConversationalAIAPIEventHandler`.
+5. Call `loadAudioSettings()` before `joinChannel()`.
+6. Join RTC.
+7. Call `subscribeMessage(channelName)`.
+8. Start the Conversational AI agent through your app or backend flow.
+9. Render callbacks from `IConversationalAIAPIEventHandler`.
+10. On exit, call `unsubscribeMessage()`, leave RTC, remove handlers, and call `destroy()`.
+
+## Troubleshooting
+
+### Events are not firing
+
+Check that the agent start request enables RTM events:
+
+```json
+{
+  "properties": {
+    "advanced_features": {
+      "enable_rtm": true
+    },
+    "parameters": {
+      "data_channel": "rtm"
+    }
+  }
+}
+```
+
+Metrics and agent errors require extra parameters:
+
+```json
+{
+  "properties": {
+    "parameters": {
+      "enable_metrics": true,
+      "enable_error_message": true
+    }
+  }
+}
+```
+
+### Word-level transcripts are empty
+
+Use `TranscriptRenderMode.Text`, or keep `enableRenderModeFallback = true` so the toolkit can fall back to text rendering when word-level data is unavailable.
+
+### Audio behavior is incorrect
+
+Make sure `loadAudioSettings()` is called before each `RtcEngine.joinChannel()` call. Use `Constants.AUDIO_SCENARIO_DEFAULT` for Avatar mode and `Constants.AUDIO_SCENARIO_AI_CLIENT` for standard voice mode.
