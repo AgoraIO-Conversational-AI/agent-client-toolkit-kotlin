@@ -9,17 +9,18 @@
     tools:context=".sample.ui.AgentChatActivity">
 
     <!-- Title -->
-    <TextView
-        android:id="@+id/tvTitle"
-        android:layout_width="0dp"
-        android:layout_height="wrap_content"
-        android:text="Agora Conversational AI"
-        android:textColor="@color/text_title"
-        android:textSize="20sp"
-        android:textStyle="bold"
+    <androidx.appcompat.widget.AppCompatImageButton
+        android:id="@+id/btnSettings"
+        android:layout_width="40dp"
+        android:layout_height="40dp"
+        android:background="@null"
+        android:contentDescription="Settings"
+        android:padding="9dp"
+        android:scaleType="centerInside"
         app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toTopOf="parent" />
+        app:layout_constraintTop_toTopOf="parent"
+        app:srcCompat="@drawable/ic_settings"
+        app:tint="@color/mic_normal_icon" />
 
     <!-- Subtitle -->
     <TextView
@@ -33,7 +34,19 @@
         android:textSize="13sp"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@id/tvTitle" />
+        app:layout_constraintTop_toTopOf="parent" />
+
+    <TextView
+        android:id="@+id/tvTurnDetectionMode"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="2dp"
+        android:textColor="@color/text_tertiary"
+        android:textSize="12sp"
+        app:layout_constraintEnd_toEndOf="@id/tvSubtitle"
+        app:layout_constraintStart_toStartOf="@id/tvSubtitle"
+        app:layout_constraintTop_toBottomOf="@id/tvSubtitle"
+        tools:text="SOS: VAD  |  EOS: Semantic" />
 
     <!-- Log Section -->
     <com.google.android.material.card.MaterialCardView
@@ -48,7 +61,7 @@
         app:strokeWidth="1dp"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@id/tvSubtitle">
+        app:layout_constraintTop_toBottomOf="@id/tvTurnDetectionMode">
 
         <ScrollView
             android:layout_width="match_parent"
@@ -93,12 +106,85 @@
                 android:layout_width="0dp"
                 android:layout_height="0dp"
                 android:clipToPadding="false"
-                android:paddingVertical="12dp"
                 android:scrollbars="vertical"
                 app:layout_constraintBottom_toTopOf="@id/llAgentStatus"
                 app:layout_constraintEnd_toEndOf="parent"
                 app:layout_constraintStart_toStartOf="parent"
-                app:layout_constraintTop_toTopOf="parent" />
+                app:layout_constraintTop_toBottomOf="@id/llCapabilityPanel" />
+
+            <LinearLayout
+                android:id="@+id/llCapabilityPanel"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:background="@color/bg_control_bar"
+                android:gravity="center_vertical"
+                android:orientation="vertical"
+                android:padding="12dp"
+                android:visibility="gone"
+                app:layout_constraintEnd_toEndOf="parent"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintTop_toTopOf="parent"
+                tools:visibility="visible">
+
+                <TextView
+                    android:id="@+id/tvCapabilityTitle"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="Capabilities"
+                    android:textColor="@color/text_subtitle"
+                    android:textSize="12sp"
+                    android:textStyle="bold" />
+
+                <LinearLayout
+                    android:id="@+id/llManualTurnActions"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal">
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/btnManualSos"
+                        android:layout_width="0dp"
+                        android:layout_height="36dp"
+                        android:layout_weight="1"
+                        android:background="@drawable/selector_button_manual"
+                        android:letterSpacing="0"
+                        android:minWidth="0dp"
+                        android:text="SOS"
+                        android:textAllCaps="false"
+                        android:textColor="@color/white"
+                        android:textSize="14sp"
+                        android:textStyle="bold"
+                        app:backgroundTint="@null"
+                        app:cornerRadius="8dp"
+                        app:elevation="0dp"
+                        app:rippleColor="#33FFFFFF" />
+
+                    <Space
+                        android:id="@+id/manualActionDivider"
+                        android:layout_width="8dp"
+                        android:layout_height="1dp" />
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/btnManualEos"
+                        android:layout_width="0dp"
+                        android:layout_height="36dp"
+                        android:layout_weight="1"
+                        android:background="@drawable/selector_button_manual"
+                        android:letterSpacing="0"
+                        android:minWidth="0dp"
+                        android:text="EOS"
+                        android:textAllCaps="false"
+                        android:textColor="@color/white"
+                        android:textSize="14sp"
+                        android:textStyle="bold"
+                        app:backgroundTint="@null"
+                        app:cornerRadius="8dp"
+                        app:elevation="0dp"
+                        app:rippleColor="#33FFFFFF" />
+                </LinearLayout>
+            </LinearLayout>
 
             <LinearLayout
                 android:id="@+id/llAgentStatus"
@@ -187,22 +273,22 @@
             app:srcCompat="@drawable/ic_mic"
             app:tint="@color/mic_normal_icon" />
 
-        <View
-            android:id="@+id/spacer1"
-            android:layout_width="24dp"
-            android:layout_height="match_parent" />
+        <Space
+            android:layout_width="8dp"
+            android:layout_height="1dp" />
 
         <com.google.android.material.button.MaterialButton
             android:id="@+id/btnStop"
             android:layout_width="0dp"
             android:layout_height="56dp"
-            android:layout_weight="2"
+            android:layout_weight="1.4"
             android:background="@drawable/selector_button_hangup"
-            android:letterSpacing="0.02"
-            android:text="Stop Agent"
+            android:letterSpacing="0"
+            android:minWidth="0dp"
+            android:text="Stop"
             android:textAllCaps="false"
             android:textColor="@color/white"
-            android:textSize="16sp"
+            android:textSize="15sp"
             android:textStyle="bold"
             app:backgroundTint="@null"
             app:cornerRadius="8dp"

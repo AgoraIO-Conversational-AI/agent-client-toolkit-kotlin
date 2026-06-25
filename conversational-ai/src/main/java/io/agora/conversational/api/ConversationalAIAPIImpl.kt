@@ -29,6 +29,62 @@ internal data class ParsedTurnFinishedEvent(
     val turn: Turn,
 )
 
+internal sealed class ParsedManualTurnEvent {
+    data class UserManualSos(val event: UserManualSosEvent) : ParsedManualTurnEvent()
+    data class UserManualEos(val event: UserManualEosEvent) : ParsedManualTurnEvent()
+    data class AgentManualEos(val event: AgentManualEosEvent) : ParsedManualTurnEvent()
+}
+
+private fun parseUserManualPayload(payload: Map<*, *>): UserManualEventPayload {
+    return UserManualEventPayload(
+        success = payload["success"] as? Boolean ?: false,
+        requestId = payload["request_id"] as? String ?: "",
+        turnId = (payload["turn_id"] as? Number)?.toLong(),
+        errorMessage = payload["error_message"] as? String,
+    )
+}
+
+internal fun parseManualTurnEvent(
+    messageType: MessageType,
+    msg: Map<String, Any>
+): ParsedManualTurnEvent? {
+    val payload = msg["payload"] as? Map<*, *> ?: return null
+    val eventId = msg["event_id"] as? String ?: ""
+    val timestamp = (msg["event_ms"] as? Number)?.toLong() ?: 0L
+
+    return when (messageType) {
+        MessageType.USER_MANUAL_SOS_RESULT -> ParsedManualTurnEvent.UserManualSos(
+            UserManualSosEvent(
+                eventId = eventId,
+                timestamp = timestamp,
+                payload = parseUserManualPayload(payload),
+            )
+        )
+
+        MessageType.USER_MANUAL_EOS_RESULT -> ParsedManualTurnEvent.UserManualEos(
+            UserManualEosEvent(
+                eventId = eventId,
+                timestamp = timestamp,
+                payload = parseUserManualPayload(payload),
+            )
+        )
+
+        MessageType.AGENT_MANUAL_EOS_RESULT -> ParsedManualTurnEvent.AgentManualEos(
+            AgentManualEosEvent(
+                eventId = eventId,
+                timestamp = timestamp,
+                payload = AgentManualEosPayload(
+                    reason = payload["reason"] as? String ?: "",
+                    maxDurationMs = (payload["max_duration_ms"] as? Number)?.toLong() ?: 0L,
+                    turnId = (payload["turn_id"] as? Number)?.toLong() ?: 0L,
+                ),
+            )
+        )
+
+        else -> null
+    }
+}
+
 internal fun resolveMessageType(msg: Map<String, Any>): MessageType {
     val messageType = (msg["event_type"] as? String)
         ?: (msg["object"] as? String)
@@ -113,7 +169,10 @@ class ConversationalAIAPIImpl(val config: ConversationalAIAPIConfig) : IConversa
         if (config.enableLog) {
             runOnMainThread {
                 try {
-                    config.rtcEngine.writeLog(Constants.LogLevel.LOG_LEVEL_INFO.ordinal, "$tag $message")
+                    config.rtcEngine.writeLog(
+                        Constants.LogLevel.LOG_LEVEL_INFO.ordinal,
+                        "$tag $message"
+                    )
                 } catch (e: Exception) {
                     e.printStackTrace()
                     Log.d(TAG, "rtcEngine writeLog ${e.message}")
@@ -203,7 +262,10 @@ class ConversationalAIAPIImpl(val config: ConversationalAIAPIConfig) : IConversa
                 MessageType.TURN_FINISHED -> {
                     val parsedTurnFinishedEvent = parseTurnFinishedEvent(publisherId, msg)
                     if (parsedTurnFinishedEvent == null) {
-                        callMessagePrint(TAG, "[onTurnFinished] ignore invalid message: metrics missing")
+                        callMessagePrint(
+                            TAG,
+                            "[onTurnFinished] ignore invalid message: metrics missing"
+                        )
                         return
                     }
 
@@ -212,7 +274,56 @@ class ConversationalAIAPIImpl(val config: ConversationalAIAPIConfig) : IConversa
                         "<<< [onTurnFinished] ${parsedTurnFinishedEvent.agentUserId} ${parsedTurnFinishedEvent.turn}"
                     )
                     conversationalAIHandlerHelper.notifyEventHandlers {
-                        it.onTurnFinished(parsedTurnFinishedEvent.agentUserId, parsedTurnFinishedEvent.turn)
+                        it.onTurnFinished(
+                            parsedTurnFinishedEvent.agentUserId,
+                            parsedTurnFinishedEvent.turn
+                        )
+                    }
+                }
+
+                MessageType.USER_MANUAL_SOS_RESULT,
+                MessageType.USER_MANUAL_EOS_RESULT,
+                MessageType.AGENT_MANUAL_EOS_RESULT -> {
+                    val parsedManualTurnEvent = parseManualTurnEvent(objectType, msg)
+                    if (parsedManualTurnEvent == null) {
+                        callMessagePrint(
+                            TAG,
+                            "[manualTurnEvent] ignore invalid message: payload missing"
+                        )
+                        return
+                    }
+
+                    val agentUserId = publisherId
+                    when (parsedManualTurnEvent) {
+                        is ParsedManualTurnEvent.UserManualSos -> {
+                            callMessagePrint(
+                                TAG,
+                                "<<< [onUserManualSosEvent] $agentUserId ${parsedManualTurnEvent.event}"
+                            )
+                            conversationalAIHandlerHelper.notifyEventHandlers {
+                                it.onUserManualSosEvent(agentUserId, parsedManualTurnEvent.event)
+                            }
+                        }
+
+                        is ParsedManualTurnEvent.UserManualEos -> {
+                            callMessagePrint(
+                                TAG,
+                                "<<< [onUserManualEosEvent] $agentUserId ${parsedManualTurnEvent.event}"
+                            )
+                            conversationalAIHandlerHelper.notifyEventHandlers {
+                                it.onUserManualEosEvent(agentUserId, parsedManualTurnEvent.event)
+                            }
+                        }
+
+                        is ParsedManualTurnEvent.AgentManualEos -> {
+                            callMessagePrint(
+                                TAG,
+                                "<<< [onAgentManualEosEvent] $agentUserId ${parsedManualTurnEvent.event}"
+                            )
+                            conversationalAIHandlerHelper.notifyEventHandlers {
+                                it.onAgentManualEosEvent(agentUserId, parsedManualTurnEvent.event)
+                            }
+                        }
                     }
                 }
                 /**
@@ -242,14 +353,18 @@ class ConversationalAIAPIImpl(val config: ConversationalAIAPIConfig) : IConversa
                         var chatMessageType = ChatMessageType.UNKNOWN
                         try {
                             val json = JSONObject(message)
-                            chatMessageType = ChatMessageType.fromValue(json.optString("resource_type"))
+                            chatMessageType =
+                                ChatMessageType.fromValue(json.optString("resource_type"))
                         } catch (e: Exception) {
                             callMessagePrint(TAG, "$objectType ${e.message}")
                         }
                         val messageError = MessageError(chatMessageType, code, message, sendTs)
 
                         val messageAgentUserId = publisherId
-                        callMessagePrint(TAG, "<<< [onMessageError] $messageAgentUserId $messageError")
+                        callMessagePrint(
+                            TAG,
+                            "<<< [onMessageError] $messageAgentUserId $messageError"
+                        )
                         conversationalAIHandlerHelper.notifyEventHandlers {
                             it.onMessageError(messageAgentUserId, messageError)
                         }
@@ -272,7 +387,8 @@ class ConversationalAIAPIImpl(val config: ConversationalAIAPIConfig) : IConversa
                     if (moduleType == ModuleType.Context) {
                         try {
                             val json = JSONObject(message)
-                            chatMessageType = ChatMessageType.fromValue(json.optString("resource_type"))
+                            chatMessageType =
+                                ChatMessageType.fromValue(json.optString("resource_type"))
                         } catch (e: Exception) {
                             callMessagePrint(TAG, "$objectType ${e.message}")
                         }
@@ -316,7 +432,10 @@ class ConversationalAIAPIImpl(val config: ConversationalAIAPIConfig) : IConversa
             event ?: return
             callMessagePrint(TAG, "<<< [onPresenceEvent] $event")
             if (channelName != event.channelName) {
-                callMessagePrint(TAG, "[onPresenceEvent] receive channel:${event.channelName} curChannel:$channelName")
+                callMessagePrint(
+                    TAG,
+                    "[onPresenceEvent] receive channel:${event.channelName} curChannel:$channelName"
+                )
                 return
             }
             // Check if channelType is MESSAGE
@@ -376,16 +495,25 @@ class ConversationalAIAPIImpl(val config: ConversationalAIAPIConfig) : IConversa
     }
 
     override fun addHandler(eventHandler: IConversationalAIAPIEventHandler) {
-        callMessagePrint(TAG, ">>> [addHandler] eventHandler:0x${eventHandler.hashCode().toString(16)}")
+        callMessagePrint(
+            TAG,
+            ">>> [addHandler] eventHandler:0x${eventHandler.hashCode().toString(16)}"
+        )
         conversationalAIHandlerHelper.subscribeEvent(eventHandler)
     }
 
     override fun removeHandler(eventHandler: IConversationalAIAPIEventHandler) {
-        callMessagePrint(TAG, ">>> [removeHandler] eventHandler:0x${eventHandler.hashCode().toString(16)}")
+        callMessagePrint(
+            TAG,
+            ">>> [removeHandler] eventHandler:0x${eventHandler.hashCode().toString(16)}"
+        )
         conversationalAIHandlerHelper.unSubscribeEvent(eventHandler)
     }
 
-    override fun subscribeMessage(channel: String, completion: (ConversationalAIAPIError?) -> Unit) {
+    override fun subscribeMessage(
+        channel: String,
+        completion: (ConversationalAIAPIError?) -> Unit
+    ) {
         val traceId = genTraceId
         callMessagePrint(TAG, ">>> [traceId:$traceId] [subscribeMessage] $channel")
         transcriptController.reset()
@@ -406,18 +534,29 @@ class ConversationalAIAPIImpl(val config: ConversationalAIAPIConfig) : IConversa
             }
 
             override fun onFailure(errorInfo: ErrorInfo) {
-                callMessagePrint(TAG, "<<< [traceId:$traceId] rtm subscribe onFailure ${errorInfo.str()}")
+                callMessagePrint(
+                    TAG,
+                    "<<< [traceId:$traceId] rtm subscribe onFailure ${errorInfo.str()}"
+                )
                 channelName = null
                 stateChangeEvents.clear()
                 runOnMainThread {
                     val errorCode = RtmConstants.RtmErrorCode.getValue(errorInfo.errorCode)
-                    completion.invoke(ConversationalAIAPIError.RtmError(errorCode, errorInfo.errorReason))
+                    completion.invoke(
+                        ConversationalAIAPIError.RtmError(
+                            errorCode,
+                            errorInfo.errorReason
+                        )
+                    )
                 }
             }
         })
     }
 
-    override fun unsubscribeMessage(channel: String, completion: (ConversationalAIAPIError?) -> Unit) {
+    override fun unsubscribeMessage(
+        channel: String,
+        completion: (ConversationalAIAPIError?) -> Unit
+    ) {
         channelName = null
         stateChangeEvents.clear()
         val traceId = genTraceId
@@ -432,10 +571,18 @@ class ConversationalAIAPIImpl(val config: ConversationalAIAPIConfig) : IConversa
             }
 
             override fun onFailure(errorInfo: ErrorInfo) {
-                callMessagePrint(TAG, "<<< [traceId:$traceId] rtm unsubscribe onFailure ${errorInfo.str()}")
+                callMessagePrint(
+                    TAG,
+                    "<<< [traceId:$traceId] rtm unsubscribe onFailure ${errorInfo.str()}"
+                )
                 runOnMainThread {
                     val errorCode = RtmConstants.RtmErrorCode.getValue(errorInfo.errorCode)
-                    completion.invoke(ConversationalAIAPIError.RtmError(errorCode, errorInfo.errorReason))
+                    completion.invoke(
+                        ConversationalAIAPIError.RtmError(
+                            errorCode,
+                            errorInfo.errorReason
+                        )
+                    )
                 }
             }
         })
@@ -473,7 +620,7 @@ class ConversationalAIAPIImpl(val config: ConversationalAIAPIConfig) : IConversa
         }
         try {
             // Convert message object to JSON string
-            val jsonMessage = JSONObject(receipt as Map<*, *>?).toString()
+            val jsonMessage = JSONObject(receipt).toString()
 
             // Set publish options
             val options = PublishOptions().apply {
@@ -481,7 +628,7 @@ class ConversationalAIAPIImpl(val config: ConversationalAIAPIConfig) : IConversa
                 customType = MessageType.USER.value     // Custom message type
             }
 
-            callMessagePrint(TAG, "[traceId:$traceId] rtm publish $jsonMessage")
+            callMessagePrint(TAG, ">>> [traceId:$traceId] rtm publish $jsonMessage")
             // Send RTM point-to-point message
             config.rtmClient.publish(
                 agentUserId, jsonMessage, options,
@@ -494,10 +641,18 @@ class ConversationalAIAPIImpl(val config: ConversationalAIAPIConfig) : IConversa
                     }
 
                     override fun onFailure(errorInfo: ErrorInfo) {
-                        callMessagePrint(TAG, "<<< [traceId:$traceId] rtm publish onFailure ${errorInfo?.str()}")
+                        callMessagePrint(
+                            TAG,
+                            "<<< [traceId:$traceId] rtm publish onFailure ${errorInfo?.str()}"
+                        )
                         runOnMainThread {
                             val errorCode = RtmConstants.RtmErrorCode.getValue(errorInfo.errorCode)
-                            completion.invoke(ConversationalAIAPIError.RtmError(errorCode, errorInfo.errorReason))
+                            completion.invoke(
+                                ConversationalAIAPIError.RtmError(
+                                    errorCode,
+                                    errorInfo.errorReason
+                                )
+                            )
                         }
                     }
                 })
@@ -509,7 +664,11 @@ class ConversationalAIAPIImpl(val config: ConversationalAIAPIConfig) : IConversa
         }
     }
 
-    private fun sendImage(agentUserId: String, message: ImageMessage, completion: (ConversationalAIAPIError?) -> Unit) {
+    private fun sendImage(
+        agentUserId: String,
+        message: ImageMessage,
+        completion: (ConversationalAIAPIError?) -> Unit
+    ) {
         val traceId = message.uuid
         val base64Info = message.imageBase64?.let {
             "base64:${it.hashCode()}"
@@ -531,7 +690,7 @@ class ConversationalAIAPIImpl(val config: ConversationalAIAPIConfig) : IConversa
 
         try {
             // Convert the actual upload payload to JSON string for sending
-            val jsonMessage = JSONObject(receipt as Map<*, *>?).toString()
+            val jsonMessage = JSONObject(receipt).toString()
 
             // Set publish options
             val options = PublishOptions().apply {
@@ -561,10 +720,18 @@ class ConversationalAIAPIImpl(val config: ConversationalAIAPIConfig) : IConversa
                     }
 
                     override fun onFailure(errorInfo: ErrorInfo) {
-                        callMessagePrint(TAG, "<<< [traceId:$traceId] rtm publish onFailure ${errorInfo?.str()}")
+                        callMessagePrint(
+                            TAG,
+                            "<<< [traceId:$traceId] rtm publish onFailure ${errorInfo?.str()}"
+                        )
                         runOnMainThread {
                             val errorCode = RtmConstants.RtmErrorCode.getValue(errorInfo.errorCode)
-                            completion.invoke(ConversationalAIAPIError.RtmError(errorCode, errorInfo.errorReason))
+                            completion.invoke(
+                                ConversationalAIAPIError.RtmError(
+                                    errorCode,
+                                    errorInfo.errorReason
+                                )
+                            )
                         }
                     }
                 })
@@ -576,7 +743,10 @@ class ConversationalAIAPIImpl(val config: ConversationalAIAPIConfig) : IConversa
         }
     }
 
-    override fun interrupt(agentUserId: String, completion: (error: ConversationalAIAPIError?) -> Unit) {
+    override fun interrupt(
+        agentUserId: String,
+        completion: (error: ConversationalAIAPIError?) -> Unit
+    ) {
         val traceId = genTraceId
         callMessagePrint(TAG, ">>> [traceId:$traceId] [interrupt] $agentUserId")
         // Build interrupt message content with structure consistent with iOS
@@ -586,7 +756,7 @@ class ConversationalAIAPIImpl(val config: ConversationalAIAPIConfig) : IConversa
 
         try {
             // Convert message object to JSON string
-            val jsonMessage = JSONObject(receipt as Map<*, *>?).toString()
+            val jsonMessage = JSONObject(receipt).toString()
 
             // Set publish options
             val options = PublishOptions().apply {
@@ -607,10 +777,18 @@ class ConversationalAIAPIImpl(val config: ConversationalAIAPIConfig) : IConversa
                     }
 
                     override fun onFailure(errorInfo: ErrorInfo) {
-                        callMessagePrint(TAG, "<<< [traceId:$traceId] rtm publish onFailure ${errorInfo?.str()}")
+                        callMessagePrint(
+                            TAG,
+                            "<<< [traceId:$traceId] rtm publish onFailure ${errorInfo?.str()}"
+                        )
                         runOnMainThread {
                             val errorCode = RtmConstants.RtmErrorCode.getValue(errorInfo.errorCode)
-                            completion.invoke(ConversationalAIAPIError.RtmError(errorCode, errorInfo.errorReason))
+                            completion.invoke(
+                                ConversationalAIAPIError.RtmError(
+                                    errorCode,
+                                    errorInfo.errorReason
+                                )
+                            )
                         }
                     }
                 })
@@ -620,6 +798,94 @@ class ConversationalAIAPIImpl(val config: ConversationalAIAPIConfig) : IConversa
                 completion.invoke(ConversationalAIAPIError.UnknownError("Message serialization failed: ${e.message}"))
             }
         }
+    }
+
+    override fun manualSOS(
+        agentUserId: String,
+        completion: (requestId: String, error: ConversationalAIAPIError?) -> Unit
+    ) {
+        val requestId = buildManualTurnRequestId("sos")
+        publishManualTurn(
+            agentUserId = agentUserId,
+            customType = "user.manual_sos",
+            requestId = requestId,
+            completion = completion
+        )
+    }
+
+    override fun manualEOS(
+        agentUserId: String,
+        completion: (requestId: String, error: ConversationalAIAPIError?) -> Unit
+    ) {
+        val requestId = buildManualTurnRequestId("eos")
+        publishManualTurn(
+            agentUserId = agentUserId,
+            customType = "user.manual_eos",
+            requestId = requestId,
+            completion = completion
+        )
+    }
+
+    private fun publishManualTurn(
+        agentUserId: String,
+        customType: String,
+        requestId: String,
+        completion: (requestId: String, error: ConversationalAIAPIError?) -> Unit
+    ) {
+        val traceId = requestId
+        callMessagePrint(
+            TAG,
+            ">>> [traceId:$traceId] [$customType] [requestId:$requestId] $agentUserId"
+        )
+
+        try {
+            val message = JSONObject(mapOf("request_id" to requestId)).toString()
+            val options = PublishOptions().apply {
+                setChannelType(RtmConstants.RtmChannelType.USER)
+                setCustomType(customType)
+            }
+
+            callMessagePrint(TAG, "[traceId:$traceId] rtm publish $message")
+            config.rtmClient.publish(
+                agentUserId,
+                message,
+                options,
+                object : ResultCallback<Void> {
+                    override fun onSuccess(responseInfo: Void?) {
+                        callMessagePrint(TAG, "<<< [traceId:$traceId] rtm publish onSuccess")
+                        runOnMainThread {
+                            completion.invoke(requestId, null)
+                        }
+                    }
+
+                    override fun onFailure(errorInfo: ErrorInfo) {
+                        callMessagePrint(
+                            TAG,
+                            "<<< [traceId:$traceId] rtm publish onFailure ${errorInfo.str()}"
+                        )
+                        runOnMainThread {
+                            val errorCode = RtmConstants.RtmErrorCode.getValue(errorInfo.errorCode)
+                            completion.invoke(
+                                requestId,
+                                ConversationalAIAPIError.RtmError(errorCode, errorInfo.errorReason)
+                            )
+                        }
+                    }
+                }
+            )
+        } catch (e: Exception) {
+            callMessagePrint(TAG, "[traceId:$traceId] [!] ${e.message}")
+            runOnMainThread {
+                completion.invoke(
+                    requestId,
+                    ConversationalAIAPIError.UnknownError("Message serialization failed: ${e.message}")
+                )
+            }
+        }
+    }
+
+    private fun buildManualTurnRequestId(prefix: String): String {
+        return "$prefix-req-${System.currentTimeMillis()}-$genTraceId"
     }
 
     override fun loadAudioSettings(scenario: Int) {
@@ -639,7 +905,10 @@ class ConversationalAIAPIImpl(val config: ConversationalAIAPIConfig) : IConversa
 
     private fun queryAgentStates(channel: String, page: String? = null) {
         if (channelName != channel) {
-            callMessagePrint(TAG, "<<< [queryAgentStates] ignore stale channel:$channel current:$channelName")
+            callMessagePrint(
+                TAG,
+                "<<< [queryAgentStates] ignore stale channel:$channel current:$channelName"
+            )
             return
         }
 
@@ -658,7 +927,10 @@ class ConversationalAIAPIImpl(val config: ConversationalAIAPIConfig) : IConversa
             object : ResultCallback<WhoNowResult> {
                 override fun onSuccess(result: WhoNowResult?) {
                     if (channelName != channel) {
-                        callMessagePrint(TAG, "<<< [queryAgentStates] stale result channel:$channel current:$channelName")
+                        callMessagePrint(
+                            TAG,
+                            "<<< [queryAgentStates] stale result channel:$channel current:$channelName"
+                        )
                         return
                     }
 
@@ -683,7 +955,10 @@ class ConversationalAIAPIImpl(val config: ConversationalAIAPIConfig) : IConversa
                 }
 
                 override fun onFailure(errorInfo: ErrorInfo) {
-                    callMessagePrint(TAG, "<<< [queryAgentStates] whoNow onFailure ${errorInfo.str()}")
+                    callMessagePrint(
+                        TAG,
+                        "<<< [queryAgentStates] whoNow onFailure ${errorInfo.str()}"
+                    )
                 }
             }
         )
@@ -779,5 +1054,6 @@ class ConversationalAIAPIImpl(val config: ConversationalAIAPIConfig) : IConversa
         return "${this.operation} ${this.errorCode} ${this.errorReason}"
     }
 
-    private val genTraceId: String get() = UUID.randomUUID().toString().replace("-", "").substring(0, 8)
+    private val genTraceId: String
+        get() = UUID.randomUUID().toString().replace("-", "").substring(0, 8)
 }

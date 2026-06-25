@@ -2,7 +2,8 @@ package io.agora.agent.toolkit.sample.api
 
 import io.agora.agent.toolkit.sample.KeyCenter
 import io.agora.agent.toolkit.sample.api.net.SecureOkHttpClient
-import kotlinx.coroutines.*
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
@@ -21,7 +22,7 @@ sealed class AgoraTokenType(val value: Int) {
  * 
  * **CRITICAL SECURITY WARNING:**
  * - This class directly exposes your App ID and App Certificate in client-side code
- * - The token generation endpoint (service.apprtc.cn) is a demo service and may be shut down at any time
+ * - The token generation endpoint is a demo toolbox service and may be shut down at any time
  * - Using this in production will expose your credentials and cause security vulnerabilities
  * - If the demo service is shut down, your production app will break
  * 
@@ -36,39 +37,11 @@ sealed class AgoraTokenType(val value: Int) {
  * This endpoint is only for demos and development tests.
  */
 object TokenGenerator {
-    private const val TOOLBOX_SERVER_HOST = "https://service.apprtc.cn/toolbox"
-
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
+    private const val DEFAULT_EXPIRE_SECONDS = 60L * 60 * 24
 
     private val okHttpClient: OkHttpClient by lazy {
         SecureOkHttpClient.create()
             .build()
-    }
-
-    var expireSecond: Long = -1
-        private set
-
-    /**
-     * Generate RTC/RTM tokens (DEMO ONLY - DO NOT USE IN PRODUCTION)
-     * 
-     * ⚠️ WARNING: This method uses a demo token service and exposes credentials in client code.
-     * For production, implement token generation on your own secure backend server.
-     */
-    fun generateTokens(
-        channelName: String,
-        uid: String,
-        tokenTypes: Array<AgoraTokenType> = arrayOf(AgoraTokenType.Rtc, AgoraTokenType.Rtm),
-        success: (String) -> Unit,
-        failure: ((Exception?) -> Unit)? = null
-    ) {
-        scope.launch(Dispatchers.Main) {
-            try {
-                val token = fetchToken(channelName, uid, tokenTypes)
-                success(token)
-            } catch (e: Exception) {
-                failure?.invoke(e)
-            }
-        }
     }
 
     /**
@@ -108,9 +81,11 @@ object TokenGenerator {
         tokenTypes: Array<AgoraTokenType>
     ): JSONObject = JSONObject().apply {
         put("appId", KeyCenter.APP_ID)
-        put("appCertificate", KeyCenter.APP_CERTIFICATE)
+        if (KeyCenter.APP_CERTIFICATE.isNotEmpty()) {
+            put("appCertificate", KeyCenter.APP_CERTIFICATE)
+        }
         put("channelName", channelName)
-        put("expire", if (expireSecond > 0) expireSecond else 60 * 60 * 24)
+        put("expire", DEFAULT_EXPIRE_SECONDS)
         put("src", "Android")
         put("ts", System.currentTimeMillis().toString())
 
@@ -124,8 +99,7 @@ object TokenGenerator {
 
     private fun buildHttpRequest(postBody: JSONObject): Request {
         // ⚠️ WARNING: This is a DEMO endpoint - DO NOT use in production
-        // Use Token007 endpoint (demo service only)
-        val url = "$TOOLBOX_SERVER_HOST/v2/token/generate"
+        val url = "${KeyCenter.TOOLBOX_SERVER_HOST.trimEnd('/')}/v2/token/generate"
 
         return Request.Builder()
             .url(url)

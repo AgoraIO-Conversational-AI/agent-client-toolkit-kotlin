@@ -47,6 +47,8 @@
     <color name="btn_start_pressed">#FF3B82F6</color>
     <color name="btn_stop_bg">#FFDC2626</color>
     <color name="btn_stop_pressed">#FFEF4444</color>
+    <color name="btn_manual_bg">#FF0F766E</color>
+    <color name="btn_manual_pressed">#FF14B8A6</color>
     <color name="btn_disabled_bg">#FF334155</color>
     <color name="btn_disabled_text">#FF94A3B8</color>
 

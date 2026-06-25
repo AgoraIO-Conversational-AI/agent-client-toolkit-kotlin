@@ -4,7 +4,7 @@ import io.agora.rtc2.Constants
 import io.agora.rtc2.RtcEngine
 import io.agora.rtm.RtmClient
 
-const val ConversationalAIAPI_VERSION = "2.2.0"
+const val ConversationalAIAPI_VERSION = "2.9.0"
 
 /*
  * This file defines the core interfaces, data structures, and error system for the Conversational AI API.
@@ -184,6 +184,7 @@ data class MessageReceipt(
  */
 enum class AgentState(val value: String) {
     IDLE("idle"),
+
     /** Agent is silent */
     SILENT("silent"),
 
@@ -245,6 +246,73 @@ data class InterruptEvent(
     val turnId: Long,
     /** Interrupt event occurrence timestamp (milliseconds since epoch, i.e., since January 1, 1970 UTC) */
     val timestamp: Long
+)
+
+/**
+ * Payload for user-triggered manual SOS/EOS result events.
+ *
+ * @property success Whether the server accepted and applied the manual turn label
+ * @property requestId Toolkit-generated ID used to correlate the API call with the server callback
+ * @property turnId Turn ID associated with the result, or null when the server failure response does not include one
+ * @property errorMessage Server-provided error message for failed results
+ */
+data class UserManualEventPayload(
+    val success: Boolean,
+    val requestId: String,
+    val turnId: Long?,
+    val errorMessage: String?,
+)
+
+/**
+ * Server result for a user-triggered manual SOS request.
+ *
+ * @property eventId Server event ID
+ * @property timestamp Event occurrence timestamp in milliseconds
+ * @property payload Manual SOS result payload
+ */
+data class UserManualSosEvent(
+    val eventId: String,
+    val timestamp: Long,
+    val payload: UserManualEventPayload,
+)
+
+/**
+ * Server result for a user-triggered manual EOS request.
+ *
+ * @property eventId Server event ID
+ * @property timestamp Event occurrence timestamp in milliseconds
+ * @property payload Manual EOS result payload
+ */
+data class UserManualEosEvent(
+    val eventId: String,
+    val timestamp: Long,
+    val payload: UserManualEventPayload,
+)
+
+/**
+ * Payload for server-triggered automatic EOS in manual mode.
+ *
+ * @property reason Server reason for the automatic EOS
+ * @property maxDurationMs Configured maximum audio duration in milliseconds
+ * @property turnId Turn ID associated with the automatic EOS
+ */
+data class AgentManualEosPayload(
+    val reason: String,
+    val maxDurationMs: Long,
+    val turnId: Long,
+)
+
+/**
+ * Server notification for automatic EOS caused by manual-mode limits.
+ *
+ * @property eventId Server event ID
+ * @property timestamp Event occurrence timestamp in milliseconds
+ * @property payload Automatic EOS payload
+ */
+data class AgentManualEosEvent(
+    val eventId: String,
+    val timestamp: Long,
+    val payload: AgentManualEosPayload,
 )
 
 /**
@@ -392,6 +460,15 @@ enum class MessageType(val value: String) {
     /** Completed-turn latency message */
     TURN_FINISHED("turn.finished"),
 
+    /** User manual start-of-speech result */
+    USER_MANUAL_SOS_RESULT("user.manual_sos.result"),
+
+    /** User manual end-of-speech result */
+    USER_MANUAL_EOS_RESULT("user.manual_eos.result"),
+
+    /** Agent automatic end-of-speech result in manual mode */
+    AGENT_MANUAL_EOS_RESULT("assistant.manual_eos.result"),
+
     /** Interrupt message */
     INTERRUPT("message.interrupt"),
 
@@ -426,16 +503,22 @@ enum class MessageType(val value: String) {
 enum class VoiceprintStatus(val value: String) {
     /** Voice print function disabled */
     DISABLE("VP_DISABLE"),
+
     /** Voice print un-register */
     UNREGISTER("VP_UNREGISTER"),
+
     /** Voice print registering */
     REGISTERING("VP_REGISTERING"),
+
     /** Voice print register success */
     REGISTER_SUCCESS("VP_REGISTER_SUCCESS"),
+
     /** Voice print register failed */
     REGISTER_FAIL("VP_REGISTER_FAIL"),
+
     /** Voice print register duplicate */
     REGISTER_DUPLICATE("VP_REGISTER_DUPLICATE"),
+
     /** Unknown status */
     UNKNOWN("unknown");
 
@@ -703,6 +786,27 @@ interface IConversationalAIAPIEventHandler {
     fun onAgentVoiceprintStateChanged(agentUserId: String, event: VoiceprintStateChangeEvent)
 
     /**
+     * Called when the server returns the result for a user-triggered manual SOS request.
+     * @param agentUserId Agent user ID
+     * @param event Manual SOS result event
+     */
+    fun onUserManualSosEvent(agentUserId: String, event: UserManualSosEvent) {}
+
+    /**
+     * Called when the server returns the result for a user-triggered manual EOS request.
+     * @param agentUserId Agent user ID
+     * @param event Manual EOS result event
+     */
+    fun onUserManualEosEvent(agentUserId: String, event: UserManualEosEvent) {}
+
+    /**
+     * Called when the server reports an automatic EOS in manual mode.
+     * @param agentUserId Agent user ID
+     * @param event Automatic EOS event
+     */
+    fun onAgentManualEosEvent(agentUserId: String, event: AgentManualEosEvent) {}
+
+    /**
      * Called when transcript content is updated.
      * @param agentUserId Agent user ID
      * @param transcript transcript data
@@ -747,14 +851,20 @@ interface IConversationalAIAPI {
      * @param channelName Channel name
      * @param completion Callback, error is null on success, non-null on failure
      */
-    fun subscribeMessage(channelName: String, completion: (error: ConversationalAIAPIError?) -> Unit)
+    fun subscribeMessage(
+        channelName: String,
+        completion: (error: ConversationalAIAPIError?) -> Unit
+    )
 
     /**
      * Unsubscribe from a channel and stop receiving events.
      * @param channelName Channel name
      * @param completion Callback, error is null on success, non-null on failure
      */
-    fun unsubscribeMessage(channelName: String, completion: (error: ConversationalAIAPIError?) -> Unit)
+    fun unsubscribeMessage(
+        channelName: String,
+        completion: (error: ConversationalAIAPIError?) -> Unit
+    )
 
     /**
      *
@@ -768,7 +878,11 @@ interface IConversationalAIAPI {
      * @param message Message object (TextMessage or ImageMessage)
      * @param completion Callback, error is null on success, non-null on failure
      */
-    fun chat(agentUserId: String, message: ChatMessage, completion: (error: ConversationalAIAPIError?) -> Unit)
+    fun chat(
+        agentUserId: String,
+        message: ChatMessage,
+        completion: (error: ConversationalAIAPIError?) -> Unit
+    )
 
     /**
      * Interrupt the AI agent's speaking.
@@ -776,6 +890,40 @@ interface IConversationalAIAPI {
      * @param completion Callback, error is null on success, non-null on failure
      */
     fun interrupt(agentUserId: String, completion: (error: ConversationalAIAPIError?) -> Unit)
+
+    /**
+     * Trigger a user-side manual start-of-speech marker through RTM.
+     *
+     * The request is sent with RTM customType `user.manual_sos` and message payload
+     * `{"request_id":"<requestId>"}`. The completion callback only reports whether
+     * the RTM publish succeeded and returns the toolkit-generated request ID.
+     * Server processing result is delivered through
+     * [IConversationalAIAPIEventHandler.onUserManualSosEvent].
+     *
+     * @param agentUserId Agent user ID
+     * @param completion Callback with request ID, error is null when RTM publish succeeds
+     */
+    fun manualSOS(
+        agentUserId: String,
+        completion: (requestId: String, error: ConversationalAIAPIError?) -> Unit
+    )
+
+    /**
+     * Trigger a user-side manual end-of-speech marker through RTM.
+     *
+     * The request is sent with RTM customType `user.manual_eos` and message payload
+     * `{"request_id":"<requestId>"}`. The completion callback only reports whether
+     * the RTM publish succeeded and returns the toolkit-generated request ID.
+     * Server processing result is delivered through
+     * [IConversationalAIAPIEventHandler.onUserManualEosEvent].
+     *
+     * @param agentUserId Agent user ID
+     * @param completion Callback with request ID, error is null when RTM publish succeeds
+     */
+    fun manualEOS(
+        agentUserId: String,
+        completion: (requestId: String, error: ConversationalAIAPIError?) -> Unit
+    )
 
     /**
      * Set audio parameters for optimal AI conversation performance.

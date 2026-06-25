@@ -7,6 +7,8 @@ import io.agora.agent.toolkit.sample.AgentApp
 import io.agora.agent.toolkit.sample.KeyCenter
 import io.agora.agent.toolkit.sample.api.AgentStarter
 import io.agora.agent.toolkit.sample.api.TokenGenerator
+import io.agora.agent.toolkit.sample.api.TurnDetectionMode
+import io.agora.conversational.api.AgentManualEosEvent
 import io.agora.conversational.api.AgentState
 import io.agora.conversational.api.ConversationalAIAPIConfig
 import io.agora.conversational.api.ConversationalAIAPIImpl
@@ -20,6 +22,8 @@ import io.agora.conversational.api.ModuleError
 import io.agora.conversational.api.StateChangeEvent
 import io.agora.conversational.api.Transcript
 import io.agora.conversational.api.Turn
+import io.agora.conversational.api.UserManualEosEvent
+import io.agora.conversational.api.UserManualSosEvent
 import io.agora.conversational.api.VoiceprintStateChangeEvent
 import io.agora.rtc2.Constants
 import io.agora.rtc2.Constants.CLIENT_ROLE_BROADCASTER
@@ -37,11 +41,8 @@ import io.agora.rtm.RtmClient
 import io.agora.rtm.RtmConfig
 import io.agora.rtm.RtmConstants
 import io.agora.rtm.RtmEventListener
-import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 
@@ -87,9 +88,23 @@ class AgentChatViewModel : ViewModel() {
     // UI State - shared between AgentHomeFragment and VoiceAssistantFragment
     data class ConversationUiState constructor(
         val isMuted: Boolean = false,
+        val sosDetectionMode: TurnDetectionMode = TurnDetectionMode.VAD,
+        val eosDetectionMode: TurnDetectionMode = TurnDetectionMode.SEMANTIC,
         // Connection state
         val connectionState: ConnectionState = ConnectionState.Idle
-    )
+    ) {
+        val isManualSosEnabled: Boolean
+            get() = sosDetectionMode == TurnDetectionMode.MANUAL
+
+        val isManualEosEnabled: Boolean
+            get() = eosDetectionMode == TurnDetectionMode.MANUAL
+
+        val isManualTurnDetectionEnabled: Boolean
+            get() = isManualSosEnabled || isManualEosEnabled
+
+        val canChangeTurnDetectionMode: Boolean
+            get() = connectionState == ConnectionState.Idle || connectionState == ConnectionState.Error
+    }
 
     private val _uiState = MutableStateFlow(ConversationUiState())
     val uiState: StateFlow<ConversationUiState> = _uiState.asStateFlow()
@@ -104,10 +119,6 @@ class AgentChatViewModel : ViewModel() {
     // Debug log list - for displaying logs in UI
     private val _debugLogList = MutableStateFlow<List<String>>(emptyList())
     val debugLogList: StateFlow<List<String>> = _debugLogList.asStateFlow()
-
-    // Agent error events (one-shot, not state)
-    private val _agentError = MutableSharedFlow<ModuleError>(extraBufferCapacity = 1)
-    val agentError: SharedFlow<ModuleError> = _agentError.asSharedFlow()
 
     private var unifiedToken: String? = null
 
@@ -249,7 +260,6 @@ class AgentChatViewModel : ViewModel() {
 
         override fun onAgentError(agentUserId: String, error: ModuleError) {
             addStatusLog("Agent error: type=${error.type.value}, code=${error.code}, msg=${error.message}")
-            _agentError.tryEmit(error)
         }
 
         override fun onMessageError(agentUserId: String, error: MessageError) {
@@ -268,6 +278,18 @@ class AgentChatViewModel : ViewModel() {
         override fun onAgentVoiceprintStateChanged(agentUserId: String, event: VoiceprintStateChangeEvent) {
             // Update voice print state to notify Activity
 
+        }
+
+        override fun onUserManualSosEvent(agentUserId: String, event: UserManualSosEvent) {
+            addStatusLog(ManualTurnDemoUi.formatUserResultLog(ManualTurnDemoUi.Action.SOS, event.payload))
+        }
+
+        override fun onUserManualEosEvent(agentUserId: String, event: UserManualEosEvent) {
+            addStatusLog(ManualTurnDemoUi.formatUserResultLog(ManualTurnDemoUi.Action.EOS, event.payload))
+        }
+
+        override fun onAgentManualEosEvent(agentUserId: String, event: AgentManualEosEvent) {
+            addStatusLog(ManualTurnDemoUi.formatAgentEosLog(event.payload))
         }
 
         override fun onDebugLog(log: String) {
@@ -318,7 +340,6 @@ class AgentChatViewModel : ViewModel() {
         config.mEventHandler = rtcEventHandler
         try {
             rtcEngine = (RtcEngine.create(config) as RtcEngineEx).apply {
-                enableVideo()
                 // load extension provider for AI-QoS
                 loadExtensionProvider("ai_echo_cancellation_extension")
                 loadExtensionProvider("ai_noise_suppression_extension")
@@ -445,7 +466,7 @@ class AgentChatViewModel : ViewModel() {
             publishMicrophoneTrack = true
             publishCameraTrack = false
             autoSubscribeAudio = true
-            autoSubscribeVideo = true
+            autoSubscribeVideo = false
         }
         val ret = rtcEngine?.joinChannel(rtcToken, channelName, uid, channelOptions)
         Log.d(TAG, "Joining RTC channel: $channelName, uid: $uid")
@@ -513,7 +534,7 @@ class AgentChatViewModel : ViewModel() {
                 }
             )
 
-            // Generate auth token for REST API (requires APP_CERTIFICATE)
+            // Generate auth token for REST API.
             val authTokenResult = TokenGenerator.generateTokensAsync(
                 channelName = channelName,
                 uid = agentUid.toString()
@@ -540,7 +561,9 @@ class AgentChatViewModel : ViewModel() {
                 agentRtcUid = agentUid.toString(),
                 agentToken = agentToken,
                 authToken = restAuthToken,
-                remoteRtcUid = userId.toString()
+                remoteRtcUid = userId.toString(),
+                sosDetectionMode = _uiState.value.sosDetectionMode,
+                eosDetectionMode = _uiState.value.eosDetectionMode
             )
             startAgentResult.fold(
                 onSuccess = { agentId ->
@@ -644,6 +667,59 @@ class AgentChatViewModel : ViewModel() {
         )
         muteLocalAudio(newMuteState)
         Log.d(TAG, "Microphone muted: $newMuteState")
+    }
+
+    fun setSosDetectionMode(sosDetectionMode: TurnDetectionMode) {
+        val currentState = _uiState.value
+        if (!currentState.canChangeTurnDetectionMode) {
+            addStatusLog("Turn detection mode cannot be changed after startup")
+            return
+        }
+        _uiState.value = currentState.copy(sosDetectionMode = sosDetectionMode)
+    }
+
+    fun setEosDetectionMode(eosDetectionMode: TurnDetectionMode) {
+        val currentState = _uiState.value
+        if (!currentState.canChangeTurnDetectionMode) {
+            addStatusLog("Turn detection mode cannot be changed after startup")
+            return
+        }
+        _uiState.value = currentState.copy(eosDetectionMode = eosDetectionMode)
+    }
+
+    fun manualSOS() {
+        if (!_uiState.value.isManualSosEnabled) {
+            addStatusLog("Manual SOS publish failed error=Manual SOS is disabled for this session")
+            return
+        }
+        publishManualTurn(ManualTurnDemoUi.Action.SOS)
+    }
+
+    fun manualEOS() {
+        if (!_uiState.value.isManualEosEnabled) {
+            addStatusLog("Manual EOS publish failed error=Manual EOS is disabled for this session")
+            return
+        }
+        publishManualTurn(ManualTurnDemoUi.Action.EOS)
+    }
+
+    private fun publishManualTurn(action: ManualTurnDemoUi.Action) {
+        val api = conversationalAIAPI ?: run {
+            addStatusLog("Manual ${action.label} publish failed error=ConversationalAIAPI is not ready")
+            return
+        }
+        val completion: (String, io.agora.conversational.api.ConversationalAIAPIError?) -> Unit = { requestId, error ->
+            if (error != null) {
+                addStatusLog(ManualTurnDemoUi.formatPublishFailureLog(action, requestId, error.errorMessage))
+            } else {
+                addStatusLog(ManualTurnDemoUi.formatPublishLog(action, requestId))
+            }
+        }
+
+        when (action) {
+            ManualTurnDemoUi.Action.SOS -> api.manualSOS(agentUid.toString(), completion)
+            ManualTurnDemoUi.Action.EOS -> api.manualEOS(agentUid.toString(), completion)
+        }
     }
 
     /**

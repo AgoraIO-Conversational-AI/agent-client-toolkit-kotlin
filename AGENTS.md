@@ -13,19 +13,24 @@ The RESTful startup payload is built in `app/src/main/java/io/agora/agent/toolki
 
 Current client-side request shape:
 
-- top-level `preset`: `deepgram_nova_3`
-- `properties.asr.language`: `en`
+- explicit `properties.asr`, `properties.llm`, and `properties.tts` blocks
 - common fields: `channel`, `token`, `agent_rtc_uid`, `remote_rtc_uids`, `idle_timeout`
 - transport fields: `advanced_features.enable_rtm`, `parameters.data_channel`
-- turn detection: `turn_detection`
+- event/debug fields: `parameters.enable_metrics`, `parameters.enable_error_message`, `parameters.transcript`
+- turn detection selected before startup:
+  - `SOS` controls `start_of_speech.mode`
+  - `EOS` controls `end_of_speech.mode`
+  - both settings support `vad`, `semantic`, and `manual`
 
 Current constraint:
 
-- RESTful startup **no longer configures LLM or TTS from the client request**
-- `llm` and `tts` blocks should not be added back unless the API contract changes again
-- `env.properties` should only carry `APP_ID` / `APP_CERTIFICATE` for the current flow
+- RESTful startup uses explicit ASR / LLM / TTS blocks in `AgentStarter.buildJsonPayload()`
+- Manual SOS/EOS capability is decided before `POST /join`. The demo stores independent SOS / EOS detection settings in `AgentChatViewModel` state and passes them into `AgentStarter.startAgentAsync(...)`.
+- Demo ASR / LLM / TTS values come from `env.example.properties` defaults plus local `env.properties` overrides through `BuildConfig` / `KeyCenter`
+- Provider keys in the demo payload are placeholders; production should move this config to a backend
+- `env.properties` carries required local `APP_ID`, optional `APP_CERTIFICATE`, optional `TOOLBOX_SERVER_HOST`, and demo ASR / LLM / TTS overrides
 
-If the upstream REST API changes and requires client-side `llm` or `tts` again, update all of these together:
+If the upstream REST API changes the client-side ASR / LLM / TTS request shape, update all of these together:
 
 1. `AgentStarter.buildJsonPayload()`
 2. `env.example.properties`
@@ -38,9 +43,9 @@ If the upstream REST API changes and requires client-side `llm` or `tts` again, 
 
 Conversational AI Quickstart — Android real-time voice conversation client.
 
-The client directly calls Agora RESTful API to start/stop Agent, authenticated via HTTP token (`Authorization: agora token=<token>`). This auth mode requires APP_CERTIFICATE to be enabled.
+The client directly calls Agora RESTful API to start/stop Agent, authenticated via HTTP token (`Authorization: agora token=<token>`).
 
-Current quickstart scope is limited to voice session startup, transcript display, state rendering, mute, and stop. It does not expose text or image message sending UI.
+Current quickstart scope is limited to voice session startup, independent startup-time selection for SOS / EOS detection, transcript display, state rendering, mute, a capability panel for enabled manual trigger buttons, and stop. It does not expose text or image message sending UI.
 
 ## Tech Stack
 
@@ -56,7 +61,7 @@ Current quickstart scope is limited to voice session startup, transcript display
 | RTC SDK | Agora RTC SDK (`io.agora.rtc:full-sdk:4.5.1`) |
 | RTM SDK | Agora RTM SDK (`io.agora:agora-rtm-lite:2.2.6`) |
 | Coroutines | Kotlin Coroutines 1.9.0 |
-| ConversationalAIAPI | Standalone `:conversational-ai` Gradle module, do not modify |
+| ConversationalAIAPI | Standalone `:conversational-ai` Gradle module |
 
 For runtime structure, see `ARCHITECTURE.md`. For entry files, see `README.md`.
 
@@ -72,24 +77,27 @@ For runtime structure, see `ARCHITECTURE.md`. For entry files, see `README.md`.
   - `transcriptList: StateFlow<List<Transcript>>` — transcript list (deduplicated/updated by turnId + type)
   - `debugLogList: StateFlow<List<String>>` — debug logs (max 20 entries)
 - Auto flow: joinRTC + loginRTM → both ready → generateToken → startAgent
+- Manual flow: the top-right Settings sheet chooses `/join` SOS / EOS detection modes before startup; after connection, the capability panel exposes SOS / EOS buttons only for detection modes set to `manual`
 - `userId` / `agentUid` are randomly generated in the companion object, and `channelName` format is `channel_kotlin_<6-digit-random>`
 
 ### AgentStarter
 
 - `startAgentAsync()`: POST `/join`
-  - Preset: `deepgram_nova_3`
-  - `properties.asr`: `language: "en"`
-  - Advanced features: `enable_rtm: true`, `data_channel: "rtm"`, `enable_string_uid: false`, `idle_timeout: 120`
+  - Explicit ASR / LLM / TTS blocks
+  - `sosDetectionMode`: controls `start_of_speech.mode`
+  - `eosDetectionMode`: controls `end_of_speech.mode`
+  - Advanced features: `enable_rtm: true`, `enable_bhvs: true`, `enable_string_uid: false`, `idle_timeout: 120`
   - Remote UIDs: `remote_rtc_uids: ["<currentUserUid>"]`
 - `stopAgentAsync()`: POST `/agents/{agentId}/leave`
-- Authentication: `Authorization: agora token=<authToken>` (requires APP_CERTIFICATE enabled)
+- Authentication: `Authorization: agora token=<authToken>`
 
 ### TokenGenerator (Demo Only)
 
-- Generates RTC/RTM tokens via demo service at `https://service.apprtc.cn/toolbox/v2/token/generate`
+- Generates RTC/RTM tokens via the ConvoAI toolbox endpoint configured by `TOOLBOX_SERVER_HOST`
 - Sends `appId`, `appCertificate`, `channelName`, `uid`, `types` (1=RTC, 2=RTM) in POST body
+- Does not send an extra token-generation auth header
 - Returns a unified token usable for both RTC and RTM
-- **Requires APP_CERTIFICATE**: the demo token service needs `appCertificate` to generate valid tokens
+- Sends `appCertificate` only when `APP_CERTIFICATE` is configured
 - Demo only — production must use your own backend for token generation
 
 ### ConversationalAIAPI
@@ -100,7 +108,11 @@ For runtime structure, see `ARCHITECTURE.md`. For entry files, see `README.md`.
   - `onAgentStateChanged`
   - `onTranscriptUpdated`
   - `onAgentError` (logged through ViewModel state/logs)
+  - `onUserManualSosEvent`
+  - `onUserManualEosEvent`
+  - `onAgentManualEosEvent`
   - `onDebugLog`
+- The public manual turn methods are `manualSOS(agentUserId, completion)` and `manualEOS(agentUserId, completion)`; the toolkit generates `requestId` internally and returns it through the completion callback
 - Audio settings: `loadAudioSettings(AUDIO_SCENARIO_AI_CLIENT)` (must be called before joinChannel)
 
 ## Configuration
@@ -108,7 +120,7 @@ For runtime structure, see `ARCHITECTURE.md`. For entry files, see `README.md`.
 ### Configuration Flow
 
 ```text
-env.properties → Gradle buildConfigField → BuildConfig → KeyCenter → AgentStarter / TokenGenerator
+env.example.properties + env.properties → Gradle buildConfigField → BuildConfig → KeyCenter → AgentStarter / TokenGenerator
 ```
 
 Gradle validates all required properties at build time. If any are missing or empty, the build fails with a clear error message listing the missing fields.
@@ -116,22 +128,30 @@ Gradle validates all required properties at build time. If any are missing or em
 ### Configuration Fields (env.properties)
 
 | Field | Description | Required | Default |
-|-------|-------------|----------|---------|
+|-------|-------------|----------|-------|
 | `APP_ID` | Agora App ID | ✅ | — |
-| `APP_CERTIFICATE` | Agora App Certificate (must be enabled) | ✅ | — |
+| `APP_CERTIFICATE` | Agora App Certificate. Optional for the current test toolbox flow; required if your token service needs it. | ❌ | — |
+| `TOOLBOX_SERVER_HOST` | Demo toolbox token service host | ❌ | empty |
+| `ASR_VENDOR` | ASR provider name | ❌ | `soniox` |
+| `ASR_API_KEY` | ASR provider key | ❌ | `xxx` |
+| `ASR_MODEL` | ASR model | ❌ | `stt-rt-preview-v2` |
+| `LLM_URL` | OpenAI-compatible LLM endpoint | ❌ | `https://api.groq.com/openai/v1/chat/completions` |
+| `LLM_API_KEY` | LLM API key | ❌ | empty |
+| `LLM_MODEL` | LLM model | ❌ | `llama-3.3-70b-versatile` |
+| `TTS_VENDOR` | TTS provider name | ❌ | `elevenlabs` |
+| `TTS_KEY` | TTS provider key | ❌ | `sk_xxx` |
+| `TTS_MODEL_ID` | TTS model ID | ❌ | `eleven_flash_v2_5` |
+| `TTS_VOICE_ID` | TTS voice ID | ❌ | empty |
+| `TTS_SAMPLE_RATE` | TTS sample rate | ❌ | `44100` |
 
-### APP_CERTIFICATE Must Be Enabled
+### APP_CERTIFICATE
 
-This project uses HTTP token auth (`Authorization: agora token=<token>`) for REST API calls, and the demo `TokenGenerator` sends `appCertificate` to the token service. Both require the App Certificate to be enabled. If `APP_CERTIFICATE` is empty or the certificate is not enabled in the Agora console, token generation and REST API calls will fail.
-
-Make sure to:
-1. Enable the primary certificate for your App ID in the [Agora Console](https://console.shengwang.cn/)
-2. Fill in the certificate value in `env.properties` under `APP_CERTIFICATE`
+This project uses HTTP token auth (`Authorization: agora token=<token>`) for REST API calls. The demo `TokenGenerator` sends `appCertificate` only when `APP_CERTIFICATE` is configured.
 
 ### Build-Time Validation
 
 `build.gradle.kts` validates the following properties are non-empty at build time:
-`APP_ID`, `APP_CERTIFICATE`
+`APP_ID`
 
 If any are missing, the build fails with a message listing the missing properties.
 
@@ -141,21 +161,20 @@ Client directly calls Agora REST API (Demo mode):
 
 | Endpoint | Method | Auth Header | Description |
 |----------|--------|-------------|-------------|
-| `api.agora.io/api/conversational-ai-agent/v2/projects/{appId}/join` | POST | `Authorization: agora token=<authToken>` | Start Agent |
-| `api.agora.io/api/conversational-ai-agent/v2/projects/{appId}/agents/{agentId}/leave` | POST | `Authorization: agora token=<authToken>` | Stop Agent |
+| `api-test.agora.io/api/conversational-ai-agent/v2/projects/{appId}/join` | POST | `Authorization: agora token=<authToken>` | Start Agent |
+| `api-test.agora.io/api/conversational-ai-agent/v2/projects/{appId}/agents/{agentId}/leave` | POST | `Authorization: agora token=<authToken>` | Stop Agent |
 
 Token generated via Demo service (must be replaced with your own backend in production):
 
 | Endpoint | Method | Description |
 |----------|--------|-------------|
-| `service.apprtc.cn/toolbox/v2/token/generate` | POST | Generate RTC/RTM Token (requires appId + appCertificate) |
+| `TOOLBOX_SERVER_HOST` + `/v2/token/generate` | POST | Generate RTC/RTM Token (requires appId; sends appCertificate when configured) |
 
 ### Start Agent Request Body Structure
 
 ```json
 {
   "name": "<channelName>",
-  "preset": "deepgram_nova_3",
   "properties": {
     "channel": "<channelName>",
     "token": "<agentToken>",
@@ -163,26 +182,64 @@ Token generated via Demo service (must be replaced with your own backend in prod
     "remote_rtc_uids": ["<currentUserUid>"],
     "enable_string_uid": false,
     "idle_timeout": 120,
-    "advanced_features": { "enable_rtm": true },
+    "advanced_features": {
+      "enable_aivad": false,
+      "enable_bhvs": true,
+      "enable_sal": false,
+      "enable_rtm": true
+    },
     "asr": {
-      "language": "en"
+      "vendor": "soniox",
+      "params": { "api_key": "xxx", "model": "stt-rt-preview-v2" }
+    },
+    "tts": {
+      "vendor": "elevenlabs",
+      "params": { "key": "sk_xxx", "model_id": "eleven_flash_v2_5", "voice_id": "xxxx", "sample_rate": 44100 }
+    },
+    "llm": {
+      "url": "https://api.groq.com/openai/v1/chat/completions",
+      "api_key": "",
+      "params": { "model": "llama-3.3-70b-versatile" },
+      "greeting_message": "hello man, I am an AI robot, I can do anything for you",
+      "failure_message": "Sorry, I don't know how to answer your question"
     },
     "parameters": {
-      "audio_scenario": "chorus",
-      "data_channel": "rtm",
-      "enable_error_message": true
+      "enable_metrics": true,
+      "enable_error_message": true,
+      "output_audio_codec": "OPUSFB",
+      "audio_scenario": "default",
+      "transcript": { "enable": true, "protocol_version": "v2", "enable_words": false },
+      "data_channel": "rtm"
     },
     "turn_detection": {
       "mode": "default",
       "config": {
-        "speech_threshold": "0.6",
-        "start_of_speech": { "model": "vad", "vad_config": { "interrupt_duration_ms": 500, "prefix_padding_ms": 800 } },
-        "end_of_speech": { "model": "semantic", "semantic_config": { "max_wait_ms": 1200, "silence_duration_ms": 480 } }
+        "speech_threshold": 0.6,
+        "start_of_speech": {
+          "mode": "vad",
+          "vad_config": { "interrupt_duration_ms": 500, "speaking_interrupt_duration_ms": 300, "prefix_padding_ms": 800 }
+        },
+        "end_of_speech": {
+          "mode": "semantic",
+          "semantic_config": { "silence_duration_ms": 480, "max_wait_ms": 1200, "pause_state_enabled": false }
+        }
       }
     }
   }
 }
 ```
+
+`SOS` and `EOS` are independent settings:
+
+| Setting | Request field | Options |
+|---------|---------------|---------|
+| `SOS` | `start_of_speech.mode` | `vad`, `semantic`, `manual` |
+| `EOS` | `end_of_speech.mode` | `vad`, `semantic`, `manual` |
+
+When either setting is `manual`, the demo shows the corresponding manual
+capability button after startup. The request still uses the same
+`turn_detection` block; only the selected `mode` and mode-specific config under
+`start_of_speech` / `end_of_speech` changes.
 
 ## Data Flow
 
@@ -200,9 +257,10 @@ User Action → ViewModel → Agora SDK (RTC/RTM)
 2. Generate userToken (unified for RTC+RTM, channelName is empty string, uid=userId)
 3. Parallel: join RTC channel + login RTM (both use the same userToken)
 4. Both ready → subscribeMessage(channelName) → generate agentToken + authToken (uid=agentUid, channelName=current channel)
-5. Call `AgentStarter.startAgentAsync(channelName, agentRtcUid, agentToken, authToken, remoteRtcUid)` to start Agent, where `remoteRtcUid` is the current user RTC UID
+5. Call `AgentStarter.startAgentAsync(channelName, agentRtcUid, agentToken, authToken, remoteRtcUid, sosDetectionMode, eosDetectionMode)` to start Agent, where `remoteRtcUid` is the current user RTC UID
 6. ConversationalAIAPI receives Agent events via RTM → update StateFlow → UI responds
-7. User taps Stop → unsubscribeMessage → `AgentStarter.stopAgentAsync(agentId, authToken)` → leave RTC → clean up state
+7. If a manual turn capability was enabled at startup, user taps the visible SOS / EOS action → `manualSOS(...)` / `manualEOS(...)` publishes the marker and logs the later server result callback
+8. User taps Stop → unsubscribeMessage → `AgentStarter.stopAgentAsync(agentId, authToken)` → leave RTC → clean up state
 
 ## How to Change Request Parameters
 
@@ -210,23 +268,25 @@ The agent start request body is built in `AgentStarter.kt` → `buildJsonPayload
 
 | Section | What it controls | Where in the JSON |
 |---------|-----------------|-------------------|
-| `preset` | Managed ASR preset | top-level `preset` |
-| `asr` | Speech-to-text language | `properties.asr` |
-| `parameters` | Data channel (`rtm`), error message toggle | `properties.parameters` |
+| `asr` | Speech-to-text provider and model | `properties.asr` |
+| `llm` | LLM endpoint and model | `properties.llm` |
+| `tts` | Text-to-speech provider and voice | `properties.tts` |
+| `parameters` | Data channel (`rtm`), metrics/errors, transcript output | `properties.parameters` |
 | `advanced_features` | RTM enable flag | `properties.advanced_features` |
 | Top-level | Channel name, agent UID, idle timeout, token | `properties.*` |
 
-To modify request parameters: edit `buildJsonPayload()` in `AgentStarter.kt`.
+To change demo ASR / LLM / TTS values, edit `env.properties`. To change the
+request JSON structure, edit `buildJsonPayload()` in `AgentStarter.kt`.
 
 ## Key Constraints
 
-1. **APP_CERTIFICATE required**: This project uses HTTP token auth for REST API and token generation. APP_CERTIFICATE must be enabled in the Agora console and configured in `env.properties`. Build will fail if it's empty.
-2. **Demo Mode**: Config injected via `env.properties` → BuildConfig, client directly calls REST API
+1. **APP_CERTIFICATE may be required by your auth/token flow**: This project uses HTTP token auth for REST API. The demo `TokenGenerator` sends `appCertificate` only when `APP_CERTIFICATE` is configured.
+2. **Demo Mode**: Config injected via `env.example.properties` + `env.properties` → BuildConfig, client directly calls REST API
 3. **Production**: Sensitive info (`appCertificate`) must be on backend; client only fetches Token and starts Agent through backend
 4. **Token Generation**: `TokenGenerator.kt` is Demo-only; production must use your own server
 5. **Resource Cleanup**: RTC/RTM resources fully released in `hangup()` and `onCleared()`; ConversationalAIAPI released via `destroy()`
 6. **Permissions**: Requires `RECORD_AUDIO` and `INTERNET` permissions
-7. **ConversationalAIAPI is read-only**: All files under the `:conversational-ai` module (`conversational-ai/src/main/java/io/agora/conversational/api/`) are standalone components — **do not modify directly**. The module is packaged for Rehoboam Maven / AAR release as a reusable library; the app depends on it via `implementation(project(":conversational-ai"))`. See `conversational-ai/README.md` for developer-facing API usage.
+7. **ConversationalAIAPI module boundary**: Files under `:conversational-ai` (`conversational-ai/src/main/java/io/agora/conversational/api/`) are reusable toolkit components packaged for Maven / AAR release. Keep the public API minimal and update `conversational-ai/README.md` when the API changes. The sample app depends on it via `implementation(project(":conversational-ai"))`.
 8. **Audio Settings**: `loadAudioSettings()` must be called before `joinChannel()`; Avatar mode uses `AUDIO_SCENARIO_DEFAULT`
 
 ## Internal Maven Release
@@ -234,6 +294,15 @@ To modify request parameters: edit `buildJsonPayload()` in `AgentStarter.kt`.
 Rehoboam is the internal Maven / AAR release platform. Do not document Rehoboam, Jenkins download URLs, or internal release requests in public-facing README files.
 
 The public `conversational-ai/README.md` should describe developer-facing API usage only.
+
+Release strategy:
+
+- Do not use the final release version as the first validation artifact.
+- Package and publish an RC first, for example `2.9.0-rc.1`.
+- Validate the RC through staging / platform validation plus sample or clean-app consumption.
+- If fixes are needed before formal publish, drop the staging deployment and publish the next RC.
+- Publish the final version, for example `2.9.0`, only after the RC passes.
+- If a problem is found after the final version is published, do not overwrite or delete that version; publish a new version such as `2.9.1`.
 
 To prepare the Rehoboam upload zip:
 

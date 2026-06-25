@@ -11,7 +11,7 @@ io.agora.agents:agora-agent-client-toolkit:<version>
 The release version comes from `lib/version.properties`:
 
 ```properties
-CONVOAI_API_VERSION=1.0.0
+CONVOAI_API_VERSION=2.9.0
 ```
 
 You can override the version for a local packaging run with:
@@ -19,6 +19,31 @@ You can override the version for a local packaging run with:
 ```bash
 ./gradlew :conversational-ai:packageMavenReleaseZip -PCONVOAI_API_VERSION=<version>
 ```
+
+## Release Strategy
+
+Do not use the final release version as the first validation artifact. Treat a
+published Maven release as immutable.
+
+Recommended flow:
+
+1. Package and publish a release candidate first, for example `2.9.0-rc.1`.
+2. Validate the RC through the publishing platform's staging / validation flow.
+3. Consume the RC from the sample app or a clean test app and verify core APIs.
+4. If fixes are needed, publish the next RC, for example `2.9.0-rc.2`.
+5. Publish the final version, for example `2.9.0`, only after the RC passes.
+
+If a problem is found before the deployment is formally published, drop the
+staging deployment and rebuild. If a problem is found after the final version is
+published, do not overwrite or delete that version; publish a new version such
+as `2.9.1`.
+
+Version guidance:
+
+- RC validation: `2.9.0-rc.1`, `2.9.0-rc.2`
+- Bug fix after final release: `2.9.0` -> `2.9.1`
+- Backward-compatible feature: `2.9.0` -> `2.10.0`
+- Breaking API change: `2.9.0` -> `3.0.0`
 
 ## Package the Maven Release Zip
 
@@ -67,8 +92,21 @@ unzip -p conversational-ai/build/distributions/agora-agent-client-toolkit-<versi
 
 ## Pre-Publish Checklist
 
-1. `CONVOAI_API_VERSION` is a non-SNAPSHOT release version.
-2. The package task succeeds.
-3. The packaged POM includes `url` and `scm`.
-4. The zip includes `.pom`, `.aar`, `-sources.jar`, and `-javadoc.jar`.
-5. Public README files do not include internal publishing URLs or platform-specific release instructions.
+1. `CONVOAI_API_VERSION` is a non-SNAPSHOT version.
+2. Before publishing the final version, a release candidate has passed sample / clean-app validation.
+3. Unit tests pass:
+
+   ```bash
+   ./gradlew :app:testDebugUnitTest :conversational-ai:testDebugUnitTest
+   ```
+
+4. The package task succeeds:
+
+   ```bash
+   ./gradlew :conversational-ai:packageMavenReleaseZip
+   ```
+
+5. The packaged POM includes `url` and `scm`.
+6. The zip includes `.pom`, `.aar`, `-sources.jar`, and `-javadoc.jar`.
+7. `git status --short` has no missing release files, untracked resources needed by layouts, or stale staged files.
+8. Public README files do not include internal publishing URLs or platform-specific release instructions.

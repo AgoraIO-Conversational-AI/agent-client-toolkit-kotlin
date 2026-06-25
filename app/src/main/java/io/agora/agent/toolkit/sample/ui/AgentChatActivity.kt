@@ -16,10 +16,14 @@ import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.ListAdapter
 import androidx.recyclerview.widget.RecyclerView
+import com.google.android.material.bottomsheet.BottomSheetDialog
+import com.google.android.material.button.MaterialButton
 import io.agora.agent.toolkit.R
 import io.agora.agent.toolkit.databinding.ActivityAgentChatBinding
+import io.agora.agent.toolkit.databinding.BottomSheetSettingsBinding
 import io.agora.agent.toolkit.databinding.ItemTranscriptAgentBinding
 import io.agora.agent.toolkit.databinding.ItemTranscriptUserBinding
+import io.agora.agent.toolkit.sample.api.TurnDetectionMode
 import io.agora.agent.toolkit.sample.tools.PermissionHelp
 import io.agora.agent.toolkit.sample.ui.common.BaseActivity
 import io.agora.conversational.api.AgentState
@@ -71,24 +75,24 @@ class AgentChatActivity : BaseActivity<ActivityAgentChatBinding>() {
             btnStart.setOnClickListener {
                 // Generate random channel name each time joining channel
                 val channelName = AgentChatViewModel.generateRandomChannelName()
+                startAgent(channelName)
+            }
 
-                // Check microphone permission before joining channel
-                checkMicrophonePermission { granted ->
-                    if (granted) {
-                        viewModel.joinChannelAndLogin(channelName)
-                    } else {
-                        Toast.makeText(
-                            this@AgentChatActivity,
-                            "Microphone permission is required to join channel",
-                            Toast.LENGTH_LONG
-                        ).show()
-                    }
-                }
+            btnSettings.setOnClickListener {
+                showSettingsSheet()
             }
 
             // Mute button click listener
             btnMute.setOnClickListener {
                 viewModel.toggleMute()
+            }
+
+            btnManualSos.setOnClickListener {
+                viewModel.manualSOS()
+            }
+
+            btnManualEos.setOnClickListener {
+                viewModel.manualEOS()
             }
 
             // Stop button click listener
@@ -122,6 +126,135 @@ class AgentChatActivity : BaseActivity<ActivityAgentChatBinding>() {
                 }
             )
         }
+    }
+
+    private fun startAgent(channelName: String) {
+        // Check microphone permission before joining channel
+        checkMicrophonePermission { granted ->
+            if (granted) {
+                viewModel.joinChannelAndLogin(channelName)
+            } else {
+                Toast.makeText(
+                    this@AgentChatActivity,
+                    "Microphone permission is required to join channel",
+                    Toast.LENGTH_LONG
+                ).show()
+            }
+        }
+    }
+
+    private fun showSettingsSheet() {
+        val state = viewModel.uiState.value
+        val sheetBinding = BottomSheetSettingsBinding.inflate(layoutInflater)
+        val dialog = BottomSheetDialog(this)
+        dialog.setContentView(sheetBinding.root)
+        dialog.setOnShowListener {
+            dialog.findViewById<View>(com.google.android.material.R.id.design_bottom_sheet)
+                ?.setBackgroundResource(R.drawable.bg_bottom_sheet)
+        }
+
+        val optionTextColor = ContextCompat.getColor(
+            this,
+            if (state.canChangeTurnDetectionMode) R.color.text_primary else R.color.text_weak
+        )
+        sheetBinding.tvTurnSosDetectionLabel.setTextColor(optionTextColor)
+        sheetBinding.tvTurnEosDetectionLabel.setTextColor(optionTextColor)
+
+        setSosModeButtonsChecked(sheetBinding, state.sosDetectionMode)
+        setEosModeButtonsChecked(sheetBinding, state.eosDetectionMode)
+        sheetBinding.groupTurnSosDetection.isEnabled = state.canChangeTurnDetectionMode
+        sheetBinding.groupTurnEosDetection.isEnabled = state.canChangeTurnDetectionMode
+        setChildButtonsEnabled(
+            sheetBinding.groupTurnSosDetection,
+            state.canChangeTurnDetectionMode
+        )
+        setChildButtonsEnabled(
+            sheetBinding.groupTurnEosDetection,
+            state.canChangeTurnDetectionMode
+        )
+
+        if (state.canChangeTurnDetectionMode) {
+            sheetBinding.btnSosVad.setOnClickListener {
+                updateSosDetectionMode(sheetBinding, TurnDetectionMode.VAD)
+            }
+            sheetBinding.btnSosSemantic.setOnClickListener {
+                updateSosDetectionMode(sheetBinding, TurnDetectionMode.SEMANTIC)
+            }
+            sheetBinding.btnSosManual.setOnClickListener {
+                updateSosDetectionMode(sheetBinding, TurnDetectionMode.MANUAL)
+            }
+            sheetBinding.btnEosVad.setOnClickListener {
+                updateEosDetectionMode(sheetBinding, TurnDetectionMode.VAD)
+            }
+            sheetBinding.btnEosSemantic.setOnClickListener {
+                updateEosDetectionMode(sheetBinding, TurnDetectionMode.SEMANTIC)
+            }
+            sheetBinding.btnEosManual.setOnClickListener {
+                updateEosDetectionMode(sheetBinding, TurnDetectionMode.MANUAL)
+            }
+        }
+
+        dialog.show()
+    }
+
+    private fun setChildButtonsEnabled(
+        group: ViewGroup,
+        enabled: Boolean
+    ) {
+        for (index in 0 until group.childCount) {
+            group.getChildAt(index).isEnabled = enabled
+        }
+    }
+
+    private fun updateSosDetectionMode(
+        sheetBinding: BottomSheetSettingsBinding,
+        mode: TurnDetectionMode
+    ) {
+        viewModel.setSosDetectionMode(mode)
+        setSosModeButtonsChecked(sheetBinding, mode)
+    }
+
+    private fun updateEosDetectionMode(
+        sheetBinding: BottomSheetSettingsBinding,
+        mode: TurnDetectionMode
+    ) {
+        viewModel.setEosDetectionMode(mode)
+        setEosModeButtonsChecked(sheetBinding, mode)
+    }
+
+    private fun setSosModeButtonsChecked(
+        sheetBinding: BottomSheetSettingsBinding,
+        mode: TurnDetectionMode
+    ) {
+        setModeButtonsChecked(
+            mode = mode,
+            vadButton = sheetBinding.btnSosVad,
+            semanticButton = sheetBinding.btnSosSemantic,
+            manualButton = sheetBinding.btnSosManual
+        )
+    }
+
+    private fun setEosModeButtonsChecked(
+        sheetBinding: BottomSheetSettingsBinding,
+        mode: TurnDetectionMode
+    ) {
+        setModeButtonsChecked(
+            mode = mode,
+            vadButton = sheetBinding.btnEosVad,
+            semanticButton = sheetBinding.btnEosSemantic,
+            manualButton = sheetBinding.btnEosManual
+        )
+    }
+
+    private fun setModeButtonsChecked(
+        mode: TurnDetectionMode,
+        vadButton: MaterialButton,
+        semanticButton: MaterialButton,
+        manualButton: MaterialButton
+    ) {
+        vadButton.isChecked = mode == TurnDetectionMode.VAD
+        semanticButton.isChecked = mode == TurnDetectionMode.SEMANTIC
+        manualButton.isChecked = mode == TurnDetectionMode.MANUAL
     }
 
     private fun showPermissionDialog(title: String, content: String, onResult: (Boolean) -> Unit) {
@@ -160,7 +293,6 @@ class AgentChatActivity : BaseActivity<ActivityAgentChatBinding>() {
                             isScrollBottom = !recyclerView.canScrollVertically(1)
                             if (isScrollBottom) {
                                 autoScrollToBottom = true
-                                isScrollBottom = true
                             }
                         }
 
@@ -195,6 +327,25 @@ class AgentChatActivity : BaseActivity<ActivityAgentChatBinding>() {
                     // Show/hide buttons
                     llStart.visibility = if (isConnected) View.GONE else View.VISIBLE
                     llControls.visibility = if (isConnected) View.VISIBLE else View.GONE
+                    tvTurnDetectionMode.text =
+                        "SOS: ${state.sosDetectionMode.displayName}  |  " +
+                            "EOS: ${state.eosDetectionMode.displayName}"
+                    val settingsTint = if (state.canChangeTurnDetectionMode) {
+                        R.color.mic_normal_icon
+                    } else {
+                        R.color.text_weak
+                    }
+                    btnSettings.setColorFilter(ContextCompat.getColor(this@AgentChatActivity, settingsTint))
+                    val showCapabilityPanel = isConnected && state.isManualTurnDetectionEnabled
+                    llCapabilityPanel.visibility = if (showCapabilityPanel) View.VISIBLE else View.GONE
+                    btnManualSos.visibility = if (state.isManualSosEnabled) View.VISIBLE else View.GONE
+                    manualActionDivider.visibility =
+                        if (state.isManualSosEnabled && state.isManualEosEnabled) {
+                            View.VISIBLE
+                        } else {
+                            View.GONE
+                        }
+                    btnManualEos.visibility = if (state.isManualEosEnabled) View.VISIBLE else View.GONE
 
                     // Update button style based on connection state
                     val isError = state.connectionState == AgentChatViewModel.ConnectionState.Error
