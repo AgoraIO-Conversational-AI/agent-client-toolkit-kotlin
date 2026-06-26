@@ -1,3 +1,7 @@
+import com.android.build.gradle.internal.api.BaseVariantOutputImpl
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 import java.util.Properties
 
 plugins {
@@ -6,6 +10,7 @@ plugins {
     alias(libs.plugins.androidx.navigation.safe.args)
 }
 
+val buildTimestamp = SimpleDateFormat("yyyyMMddHHmmss", Locale.US).format(Date())
 // Load env.example.properties as demo defaults, then override with local env.properties.
 val envDefaultProperties = Properties()
 val envDefaultPropertiesFile = rootProject.file("env.example.properties")
@@ -47,7 +52,6 @@ if (missingProperties.isNotEmpty()) {
     }
     throw GradleException(errorMessage)
 }
-
 
 android {
     namespace = "io.agora.agent.toolkit"
@@ -103,8 +107,22 @@ android {
         buildConfigNumber("int", "TTS_SAMPLE_RATE")
     }
 
+    signingConfigs {
+        create("release") {
+            storeFile = project.file("agora_test.jks")
+            storePassword = "agoratest123"
+            keyAlias = "agora"
+            keyPassword = "agoratest123"
+        }
+    }
+
     buildTypes {
+        debug {
+            signingConfig = signingConfigs.getByName("release")
+        }
+
         release {
+            signingConfig = signingConfigs.getByName("release")
             isMinifyEnabled = false
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
@@ -124,6 +142,17 @@ android {
         // targetSdk 36 is the latest stable Android (16). Newer installed
         // platforms (37/Canary) are previews we intentionally do not target.
         disable += "OldTargetApi"
+    }
+
+    applicationVariants.all {
+        if (buildType.name == "release") {
+            outputs.all {
+                val flavorPrefix = "Agora_Agent_Client_Toolkit_Demo_for_Android"
+                val packageName = applicationId.replace('.', '_')
+                (this as BaseVariantOutputImpl).outputFileName =
+                    "${flavorPrefix}_${packageName}_v${versionName.orEmpty()}_${buildTimestamp}.apk"
+            }
+        }
     }
 }
 

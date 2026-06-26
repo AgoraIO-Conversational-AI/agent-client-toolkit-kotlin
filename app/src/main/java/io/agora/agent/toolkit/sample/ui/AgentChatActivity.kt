@@ -18,6 +18,7 @@ import androidx.recyclerview.widget.ListAdapter
 import androidx.recyclerview.widget.RecyclerView
 import com.google.android.material.bottomsheet.BottomSheetDialog
 import com.google.android.material.button.MaterialButton
+import io.agora.agent.toolkit.BuildConfig
 import io.agora.agent.toolkit.R
 import io.agora.agent.toolkit.databinding.ActivityAgentChatBinding
 import io.agora.agent.toolkit.databinding.BottomSheetSettingsBinding
@@ -27,6 +28,7 @@ import io.agora.agent.toolkit.sample.api.TurnDetectionMode
 import io.agora.agent.toolkit.sample.tools.PermissionHelp
 import io.agora.agent.toolkit.sample.ui.common.BaseActivity
 import io.agora.conversational.api.AgentState
+import io.agora.conversational.api.ConversationalAIAPI_VERSION
 import io.agora.conversational.api.Transcript
 import io.agora.conversational.api.TranscriptType
 import kotlinx.coroutines.launch
@@ -159,6 +161,8 @@ class AgentChatActivity : BaseActivity<ActivityAgentChatBinding>() {
         )
         sheetBinding.tvTurnSosDetectionLabel.setTextColor(optionTextColor)
         sheetBinding.tvTurnEosDetectionLabel.setTextColor(optionTextColor)
+        sheetBinding.tvVersionInfo.text =
+            "Demo v${BuildConfig.VERSION_NAME}  |  Component v$ConversationalAIAPI_VERSION"
 
         setSosModeButtonsChecked(sheetBinding, state.sosDetectionMode)
         setEosModeButtonsChecked(sheetBinding, state.eosDetectionMode)
