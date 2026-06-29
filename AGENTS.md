@@ -45,7 +45,7 @@ Conversational AI Quickstart — Android real-time voice conversation client.
 
 The client directly calls Agora RESTful API to start/stop Agent, authenticated via HTTP token (`Authorization: agora token=<token>`).
 
-Current quickstart scope is limited to voice session startup, independent startup-time selection for SOS / EOS detection, transcript display, state rendering, mute, a capability panel for enabled manual trigger buttons, and stop. It does not expose text or image message sending UI.
+Current quickstart scope is limited to voice session startup, independent startup-time selection for SOS / EOS detection, transcript display with optional latency metrics, state rendering, mute, text / image URL message sending, interrupt, a capability panel for enabled manual trigger buttons, and stop.
 
 ## Tech Stack
 
@@ -72,11 +72,13 @@ For runtime structure, see `ARCHITECTURE.md`. For entry files, see `README.md`.
 - Manages RTC Engine and RTM Client lifecycle
 - Subscribes to RTM messages via ConversationalAIAPI, parses Agent state and transcripts
 - Exposes four StateFlows:
-  - `uiState: StateFlow<ConversationUiState>` — connection state (Idle/Connecting/Connected/Error) + mute
+  - `uiState: StateFlow<ConversationUiState>` — connection state (Idle/Connecting/Connected) + mute
   - `agentState: StateFlow<AgentState>` — Agent state (IDLE/SILENT/LISTENING/THINKING/SPEAKING)
-  - `transcriptList: StateFlow<List<Transcript>>` — transcript list (deduplicated/updated by turnId + type)
+  - `transcriptList: StateFlow<List<TranscriptItem>>` — transcript list (deduplicated/updated by turnId + type) plus optional per-turn latency metrics
   - `debugLogList: StateFlow<List<String>>` — debug logs (max 20 entries)
 - Auto flow: joinRTC + loginRTM → both ready → generateToken → startAgent
+- Startup failure flow: transport/token/startup failures release partial startup side effects and return UI state to `Idle`
+- Message flow: connected UI can send text messages, image URL messages, and interrupt requests through ConversationalAIAPI
 - Manual flow: the top-right Settings sheet chooses `/join` SOS / EOS detection modes before startup; after connection, the capability panel exposes SOS / EOS buttons only for detection modes set to `manual`
 - `userId` / `agentUid` are randomly generated in the companion object, and `channelName` format is `channel_kotlin_<6-digit-random>`
 
@@ -107,11 +109,15 @@ For runtime structure, see `ARCHITECTURE.md`. For entry files, see `README.md`.
 - The quickstart currently reacts to:
   - `onAgentStateChanged`
   - `onTranscriptUpdated`
+  - `onTurnFinished` (latency metrics)
   - `onAgentError` (logged through ViewModel state/logs)
+  - `onMessageError`
+  - `onMessageReceiptUpdated`
   - `onUserManualSosEvent`
   - `onUserManualEosEvent`
   - `onAgentManualEosEvent`
   - `onDebugLog`
+- The connected UI can call `chat(agentUserId, TextMessage/ImageMessage, completion)` and `interrupt(agentUserId, completion)`
 - The public manual turn methods are `manualSOS(agentUserId, completion)` and `manualEOS(agentUserId, completion)`; the toolkit generates `requestId` internally and returns it through the completion callback
 - Audio settings: `loadAudioSettings(AUDIO_SCENARIO_AI_CLIENT)` (must be called before joinChannel)
 
@@ -259,8 +265,9 @@ User Action → ViewModel → Agora SDK (RTC/RTM)
 4. Both ready → subscribeMessage(channelName) → generate agentToken + authToken (uid=agentUid, channelName=current channel)
 5. Call `AgentStarter.startAgentAsync(channelName, agentRtcUid, agentToken, authToken, remoteRtcUid, sosDetectionMode, eosDetectionMode)` to start Agent, where `remoteRtcUid` is the current user RTC UID
 6. ConversationalAIAPI receives Agent events via RTM → update StateFlow → UI responds
-7. If a manual turn capability was enabled at startup, user taps the visible SOS / EOS action → `manualSOS(...)` / `manualEOS(...)` publishes the marker and logs the later server result callback
-8. User taps Stop → unsubscribeMessage → `AgentStarter.stopAgentAsync(agentId, authToken)` → leave RTC → clean up state
+7. User can send text / image URL messages or interrupt requests through the connected controls
+8. If a manual turn capability was enabled at startup, user taps the visible SOS / EOS action → `manualSOS(...)` / `manualEOS(...)` publishes the marker and logs the later server result callback
+9. User taps Stop → unsubscribeMessage → `AgentStarter.stopAgentAsync(agentId, authToken)` → leave RTC → clean up state
 
 ## How to Change Request Parameters
 

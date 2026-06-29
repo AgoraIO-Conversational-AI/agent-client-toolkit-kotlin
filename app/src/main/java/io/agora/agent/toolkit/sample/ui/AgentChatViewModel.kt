@@ -10,17 +10,22 @@ import io.agora.agent.toolkit.sample.api.TokenGenerator
 import io.agora.agent.toolkit.sample.api.TurnDetectionMode
 import io.agora.conversational.api.AgentManualEosEvent
 import io.agora.conversational.api.AgentState
+import io.agora.conversational.api.ChatMessage
 import io.agora.conversational.api.ConversationalAIAPIConfig
 import io.agora.conversational.api.ConversationalAIAPIImpl
 import io.agora.conversational.api.IConversationalAIAPI
 import io.agora.conversational.api.IConversationalAIAPIEventHandler
+import io.agora.conversational.api.ImageMessage
 import io.agora.conversational.api.InterruptEvent
 import io.agora.conversational.api.MessageError
 import io.agora.conversational.api.MessageReceipt
 import io.agora.conversational.api.Metric
 import io.agora.conversational.api.ModuleError
+import io.agora.conversational.api.Priority
 import io.agora.conversational.api.StateChangeEvent
+import io.agora.conversational.api.TextMessage
 import io.agora.conversational.api.Transcript
+import io.agora.conversational.api.TranscriptType
 import io.agora.conversational.api.Turn
 import io.agora.conversational.api.UserManualEosEvent
 import io.agora.conversational.api.UserManualSosEvent
@@ -45,6 +50,8 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlin.math.roundToInt
+import java.util.UUID
 
 /**
  * ViewModel for managing conversation-related business logic
@@ -81,8 +88,7 @@ class AgentChatViewModel : ViewModel() {
     enum class ConnectionState {
         Idle,
         Connecting,
-        Connected,
-        Error
+        Connected
     }
 
     // UI State - shared between AgentHomeFragment and VoiceAssistantFragment
@@ -103,15 +109,30 @@ class AgentChatViewModel : ViewModel() {
             get() = isManualSosEnabled || isManualEosEnabled
 
         val canChangeTurnDetectionMode: Boolean
-            get() = connectionState == ConnectionState.Idle || connectionState == ConnectionState.Error
+            get() = connectionState == ConnectionState.Idle
     }
+
+    data class TurnLatencyMetrics(
+        val turnId: Long,
+        val e2eLatencyMs: Int?,
+        val transportLatencyMs: Int?,
+        val algorithmProcessingLatencyMs: Int?,
+        val asrLatencyMs: Int?,
+        val llmLatencyMs: Int?,
+        val ttsLatencyMs: Int?,
+    )
+
+    data class TranscriptItem(
+        val transcript: Transcript,
+        val latencyMetrics: TurnLatencyMetrics? = null,
+    )
 
     private val _uiState = MutableStateFlow(ConversationUiState())
     val uiState: StateFlow<ConversationUiState> = _uiState.asStateFlow()
 
     // Transcript list - separate from UI state
-    private val _transcriptList = MutableStateFlow<List<Transcript>>(emptyList())
-    val transcriptList: StateFlow<List<Transcript>> = _transcriptList.asStateFlow()
+    private val _transcriptList = MutableStateFlow<List<TranscriptItem>>(emptyList())
+    val transcriptList: StateFlow<List<TranscriptItem>> = _transcriptList.asStateFlow()
 
     private val _agentState = MutableStateFlow<AgentState>(AgentState.IDLE)
     val agentState: StateFlow<AgentState?> = _agentState.asStateFlow()
@@ -128,9 +149,11 @@ class AgentChatViewModel : ViewModel() {
 
     private var rtcJoined = false
     private var rtmLoggedIn = false
+    private var connectionAttemptId = 0
 
     // Agent management
     private var agentId: String? = null
+    private var isStartingAgent = false
     // Auth token for REST API (app-credentials mode)
     private var authToken: String? = null
 
@@ -142,6 +165,10 @@ class AgentChatViewModel : ViewModel() {
     private val rtcEventHandler = object : IRtcEngineEventHandler() {
         override fun onJoinChannelSuccess(channel: String?, uid: Int, elapsed: Int) {
             viewModelScope.launch {
+                if (channel != channelName || _uiState.value.connectionState != ConnectionState.Connecting) {
+                    Log.d(TAG, "Ignore stale RTC join callback, channel: $channel, currentChannel: $channelName")
+                    return@launch
+                }
                 rtcJoined = true
                 addStatusLog("Rtc onJoinChannelSuccess, channel:${channel} uid:$uid")
                 Log.d(TAG, "RTC joined channel: $channel, uid: $uid")
@@ -180,11 +207,9 @@ class AgentChatViewModel : ViewModel() {
 
         override fun onError(err: Int) {
             viewModelScope.launch {
-                _uiState.value = _uiState.value.copy(
-                    connectionState = ConnectionState.Error
-                )
                 addStatusLog("Rtc onError: $err")
                 Log.e(TAG, "RTC error: $err")
+                handleTransportFailureDuringStartup(connectionAttemptId)
             }
         }
 
@@ -213,11 +238,8 @@ class AgentChatViewModel : ViewModel() {
                     isRtmLogin = false
                     isLoggingIn = false
                     viewModelScope.launch {
-                        _uiState.value = _uiState.value.copy(
-                            connectionState = ConnectionState.Error
-                        )
                         addStatusLog("Rtm connected failed")
-                        unifiedToken = null
+                        handleTransportFailureDuringStartup(connectionAttemptId)
                     }
                 }
 
@@ -255,7 +277,7 @@ class AgentChatViewModel : ViewModel() {
             agentUserId: String,
             turn: Turn
         ) {
-            // Handle turn finished
+            updateTurnLatencyMetrics(turn)
         }
 
         override fun onAgentError(agentUserId: String, error: ModuleError) {
@@ -263,7 +285,9 @@ class AgentChatViewModel : ViewModel() {
         }
 
         override fun onMessageError(agentUserId: String, error: MessageError) {
-            // Handle message error
+            addStatusLog(
+                "Message error: type=${error.chatMessageType.value}, code=${error.code}, msg=${error.message}"
+            )
         }
 
         override fun onTranscriptUpdated(agentUserId: String, transcript: Transcript) {
@@ -272,7 +296,9 @@ class AgentChatViewModel : ViewModel() {
         }
 
         override fun onMessageReceiptUpdated(agentUserId: String, receipt: MessageReceipt) {
-            // Handle message receipt
+            addStatusLog(
+                "Message receipt: type=${receipt.chatMessageType.value}, module=${receipt.type.value}, turn=${receipt.turnId}"
+            )
         }
 
         override fun onAgentVoiceprintStateChanged(agentUserId: String, event: VoiceprintStateChangeEvent) {
@@ -319,9 +345,7 @@ class AgentChatViewModel : ViewModel() {
             Log.d(TAG, "RTC engine and RTM client created successfully")
         } else {
             Log.e(TAG, "Failed to create RTC engine or RTM client")
-            _uiState.value = _uiState.value.copy(
-                connectionState = ConnectionState.Error
-            )
+            addStatusLog("Failed to create RTC engine or RTM client")
         }
     }
 
@@ -458,8 +482,13 @@ class AgentChatViewModel : ViewModel() {
     /**
      * Join RTC channel
      */
-    private fun joinRtcChannel(rtcToken: String, channelName: String, uid: Int) {
+    private fun joinRtcChannel(rtcToken: String, channelName: String, uid: Int): Boolean {
         Log.d(TAG, "joinChannel channelName: $channelName, localUid: $uid")
+        val engine = rtcEngine ?: run {
+            Log.e(TAG, "Join RTC room failed, rtcEngine is null")
+            addStatusLog("Rtc joinChannel failed: rtcEngine is null")
+            return false
+        }
         // join rtc channel
         val channelOptions = ChannelMediaOptions().apply {
             clientRoleType = CLIENT_ROLE_BROADCASTER
@@ -468,13 +497,15 @@ class AgentChatViewModel : ViewModel() {
             autoSubscribeAudio = true
             autoSubscribeVideo = false
         }
-        val ret = rtcEngine?.joinChannel(rtcToken, channelName, uid, channelOptions)
+        val ret = engine.joinChannel(rtcToken, channelName, uid, channelOptions)
         Log.d(TAG, "Joining RTC channel: $channelName, uid: $uid")
-        if (ret == ERR_OK) {
+        return if (ret == ERR_OK) {
             Log.d(TAG, "Join RTC room success")
+            true
         } else {
             Log.e(TAG, "Join RTC room failed, ret: $ret")
             addStatusLog("Rtc joinChannel failed ret: $ret")
+            false
         }
     }
 
@@ -498,8 +529,8 @@ class AgentChatViewModel : ViewModel() {
      * Check if both RTC and RTM are connected, then start agent
      */
     private fun checkJoinAndLoginComplete() {
-        if (rtcJoined && rtmLoggedIn) {
-            startAgent()
+        if (_uiState.value.connectionState == ConnectionState.Connecting && rtcJoined && rtmLoggedIn) {
+            startAgent(connectionAttemptId)
         }
     }
 
@@ -507,11 +538,24 @@ class AgentChatViewModel : ViewModel() {
      * Start agent (called automatically after RTC and RTM are connected)
      */
     fun startAgent() {
+        startAgent(connectionAttemptId)
+    }
+
+    private fun startAgent(attemptId: Int) {
         viewModelScope.launch {
-            if (agentId != null) {
+            if (!isCurrentConnectionAttempt(attemptId)) {
+                Log.d(TAG, "Ignore stale startAgent attempt: $attemptId")
+                return@launch
+            }
+            if (_uiState.value.connectionState != ConnectionState.Connecting || !rtcJoined || !rtmLoggedIn) {
+                Log.d(TAG, "Ignore startAgent before RTC/RTM are ready")
+                return@launch
+            }
+            if (agentId != null || isStartingAgent) {
                 Log.d(TAG, "Agent already started, agentId: $agentId")
                 return@launch
             }
+            isStartingAgent = true
 
             // Generate token for agent (always required)
             val tokenResult = TokenGenerator.generateTokensAsync(
@@ -525,14 +569,16 @@ class AgentChatViewModel : ViewModel() {
                     token
                 },
                 onFailure = { exception ->
-                    _uiState.value = _uiState.value.copy(
-                        connectionState = ConnectionState.Error
-                    )
                     addStatusLog("Generate agent token failed")
                     Log.e(TAG, "Failed to generate agent token: ${exception.message}", exception)
+                    failStartupAttempt(attemptId)
                     return@launch
                 }
             )
+            if (!isCurrentConnectionAttempt(attemptId)) {
+                isStartingAgent = false
+                return@launch
+            }
 
             // Generate auth token for REST API.
             val authTokenResult = TokenGenerator.generateTokensAsync(
@@ -547,14 +593,16 @@ class AgentChatViewModel : ViewModel() {
                     token
                 },
                 onFailure = { exception ->
-                    _uiState.value = _uiState.value.copy(
-                        connectionState = ConnectionState.Error
-                    )
                     addStatusLog("Generate auth token failed")
                     Log.e(TAG, "Failed to generate auth token: ${exception.message}", exception)
+                    failStartupAttempt(attemptId)
                     return@launch
                 }
             )
+            if (!isCurrentConnectionAttempt(attemptId)) {
+                isStartingAgent = false
+                return@launch
+            }
 
             val startAgentResult = AgentStarter.startAgentAsync(
                 channelName = channelName,
@@ -565,9 +613,17 @@ class AgentChatViewModel : ViewModel() {
                 sosDetectionMode = _uiState.value.sosDetectionMode,
                 eosDetectionMode = _uiState.value.eosDetectionMode
             )
+            if (!isCurrentConnectionAttempt(attemptId)) {
+                startAgentResult.getOrNull()?.let { staleAgentId ->
+                    AgentStarter.stopAgentAsync(staleAgentId, restAuthToken)
+                }
+                isStartingAgent = false
+                return@launch
+            }
             startAgentResult.fold(
                 onSuccess = { agentId ->
                     this@AgentChatViewModel.agentId = agentId
+                    isStartingAgent = false
                     _uiState.value = _uiState.value.copy(
                         connectionState = ConnectionState.Connected
                     )
@@ -575,11 +631,10 @@ class AgentChatViewModel : ViewModel() {
                     Log.d(TAG, "Agent started successfully, agentId: $agentId")
                 },
                 onFailure = { exception ->
-                    _uiState.value = _uiState.value.copy(
-                        connectionState = ConnectionState.Error
-                    )
+                    isStartingAgent = false
                     addStatusLog("Agent start failed")
                     Log.e(TAG, "Failed to start agent: ${exception.message}", exception)
+                    failStartupAttempt(attemptId)
                 }
             )
         }
@@ -604,9 +659,6 @@ class AgentChatViewModel : ViewModel() {
                 token
             },
             onFailure = { exception ->
-                _uiState.value = _uiState.value.copy(
-                    connectionState = ConnectionState.Error
-                )
                 addStatusLog("Generate user token failed")
                 Log.e(TAG, "Failed to get token: ${exception.message}", exception)
                 null
@@ -620,6 +672,14 @@ class AgentChatViewModel : ViewModel() {
      */
     fun joinChannelAndLogin(channelName: String) {
         viewModelScope.launch {
+            val currentConnectionState = _uiState.value.connectionState
+            if (currentConnectionState == ConnectionState.Connecting || currentConnectionState == ConnectionState.Connected) {
+                addStatusLog("Start ignored: connection is already ${currentConnectionState.name.lowercase()}")
+                return@launch
+            }
+
+            val attemptId = nextConnectionAttemptId()
+
             this@AgentChatViewModel.channelName = channelName
             rtcJoined = false
             rtmLoggedIn = false
@@ -629,14 +689,27 @@ class AgentChatViewModel : ViewModel() {
             )
 
             // Get token if not available, otherwise use existing token
-            val token = unifiedToken ?: generateUserToken() ?: return@launch
+            val token = generateUserToken() ?: run {
+                failStartupAttempt(attemptId)
+                return@launch
+            }
+            if (!isCurrentConnectionAttempt(attemptId)) {
+                return@launch
+            }
 
             // Join RTC channel with the unified token
-            joinRtcChannel(token, channelName, userId)
+            if (!joinRtcChannel(token, channelName, userId)) {
+                failStartupAttempt(attemptId)
+                return@launch
+            }
 
             // Login RTM with the same unified token
             loginRtm(token) { exception ->
                 viewModelScope.launch {
+                    if (!isCurrentConnectionAttempt(attemptId) || this@AgentChatViewModel.channelName != channelName) {
+                        Log.d(TAG, "Ignore stale RTM login callback for channel: $channelName")
+                        return@launch
+                    }
                     if (exception == null) {
                         rtmLoggedIn = true
                         conversationalAIAPI?.subscribeMessage(channelName) { errorInfo ->
@@ -646,15 +719,59 @@ class AgentChatViewModel : ViewModel() {
                         }
                         checkJoinAndLoginComplete()
                     } else {
-                        _uiState.value = _uiState.value.copy(
-                            connectionState = ConnectionState.Error
-                        )
                         Log.e(TAG, "RTM login failed: ${exception.message}", exception)
+                        failStartupAttempt(attemptId)
                     }
                 }
             }
 
         }
+    }
+
+    private fun nextConnectionAttemptId(): Int {
+        connectionAttemptId += 1
+        return connectionAttemptId
+    }
+
+    private fun isCurrentConnectionAttempt(attemptId: Int): Boolean {
+        return attemptId == connectionAttemptId
+    }
+
+    private suspend fun handleTransportFailureDuringStartup(attemptId: Int) {
+        if (_uiState.value.connectionState == ConnectionState.Connecting) {
+            failStartupAttempt(attemptId)
+        }
+    }
+
+    private suspend fun failStartupAttempt(attemptId: Int) {
+        if (!isCurrentConnectionAttempt(attemptId)) return
+        if (_uiState.value.connectionState != ConnectionState.Connecting) return
+        connectionAttemptId += 1
+        releaseStartupSideEffects()
+        _uiState.value = _uiState.value.copy(
+            connectionState = ConnectionState.Idle
+        )
+    }
+
+    private suspend fun releaseStartupSideEffects() {
+        val previousChannelName = channelName
+        if (previousChannelName.isNotEmpty()) {
+            conversationalAIAPI?.unsubscribeMessage(previousChannelName) { errorInfo ->
+                if (errorInfo != null) {
+                    Log.e(TAG, "Unsubscribe message error: ${errorInfo}")
+                }
+            }
+        }
+
+        leaveRtcChannel()
+        logoutRtm()
+        rtcJoined = false
+        rtmLoggedIn = false
+        isRtmLogin = false
+        isLoggingIn = false
+        isStartingAgent = false
+        authToken = null
+        unifiedToken = null
     }
 
     /**
@@ -703,6 +820,75 @@ class AgentChatViewModel : ViewModel() {
         publishManualTurn(ManualTurnDemoUi.Action.EOS)
     }
 
+    fun sendTextMessage(text: String): Boolean {
+        val content = text.trim()
+        if (content.isEmpty()) {
+            addStatusLog("Send text failed error=Text is empty")
+            return false
+        }
+        return sendChatMessage(
+            label = "Text",
+            message = TextMessage(
+                priority = Priority.INTERRUPT,
+                responseInterruptable = true,
+                text = content
+            )
+        )
+    }
+
+    fun sendImageUrlMessage(imageUrl: String): Boolean {
+        val url = imageUrl.trim()
+        if (url.isEmpty()) {
+            addStatusLog("Send image failed error=Image URL is empty")
+            return false
+        }
+        if (!url.startsWith("http://") && !url.startsWith("https://")) {
+            addStatusLog("Send image failed error=Image URL must start with http:// or https://")
+            return false
+        }
+        return sendChatMessage(
+            label = "Image",
+            message = ImageMessage(
+                uuid = UUID.randomUUID().toString(),
+                imageUrl = url
+            )
+        )
+    }
+
+    fun sendInterrupt() {
+        val api = requireConnectedConversationalAIAPI("Interrupt") ?: return
+        api.interrupt(agentUid.toString()) { error ->
+            if (error != null) {
+                addStatusLog("Interrupt failed error=${error.errorMessage}")
+            } else {
+                addStatusLog("Interrupt sent successfully")
+            }
+        }
+    }
+
+    private fun sendChatMessage(label: String, message: ChatMessage): Boolean {
+        val api = requireConnectedConversationalAIAPI("Send $label") ?: return false
+        api.chat(agentUid.toString(), message) { error ->
+            if (error != null) {
+                addStatusLog("Send $label failed error=${error.errorMessage}")
+            } else {
+                addStatusLog("Send $label successfully")
+            }
+        }
+        return true
+    }
+
+    private fun requireConnectedConversationalAIAPI(action: String): IConversationalAIAPI? {
+        if (_uiState.value.connectionState != ConnectionState.Connected) {
+            addStatusLog("$action failed error=Agent is not connected")
+            return null
+        }
+        return conversationalAIAPI ?: run {
+            addStatusLog("$action failed error=ConversationalAIAPI is not ready")
+            null
+        }
+    }
+
     private fun publishManualTurn(action: ManualTurnDemoUi.Action) {
         val api = conversationalAIAPI ?: run {
             addStatusLog("Manual ${action.label} publish failed error=ConversationalAIAPI is not ready")
@@ -730,14 +916,70 @@ class AgentChatViewModel : ViewModel() {
             val currentList = _transcriptList.value.toMutableList()
             // Update existing transcript if same turnId, otherwise add new
             val existingIndex =
-                currentList.indexOfFirst { it.turnId == transcript.turnId && it.type == transcript.type }
+                currentList.indexOfFirst {
+                    it.transcript.turnId == transcript.turnId && it.transcript.type == transcript.type
+                }
             if (existingIndex >= 0) {
-                currentList[existingIndex] = transcript
+                currentList[existingIndex] = currentList[existingIndex].copy(
+                    transcript = transcript,
+                    latencyMetrics = currentList[existingIndex].latencyMetrics
+                        ?: if (transcript.type == TranscriptType.AGENT) {
+                            pendingTurnLatencyMetrics.remove(transcript.turnId)
+                        } else {
+                            null
+                        }
+                )
             } else {
-                currentList.add(transcript)
+                currentList.add(
+                    TranscriptItem(
+                        transcript = transcript,
+                        latencyMetrics = if (transcript.type == TranscriptType.AGENT) {
+                            pendingTurnLatencyMetrics.remove(transcript.turnId)
+                        } else {
+                            null
+                        }
+                    )
+                )
             }
             _transcriptList.value = currentList
         }
+    }
+
+    private val pendingTurnLatencyMetrics = mutableMapOf<Long, TurnLatencyMetrics>()
+
+    private fun updateTurnLatencyMetrics(turn: Turn) {
+        viewModelScope.launch {
+            val metrics = turn.toLatencyMetrics()
+            val currentList = _transcriptList.value.toMutableList()
+            val index = currentList.indexOfFirst {
+                it.transcript.turnId == turn.turnId && it.transcript.type == TranscriptType.AGENT
+            }
+            if (index >= 0) {
+                currentList[index] = currentList[index].copy(latencyMetrics = metrics)
+                _transcriptList.value = currentList
+            } else {
+                pendingTurnLatencyMetrics[turn.turnId] = metrics
+            }
+        }
+    }
+
+    private fun Turn.toLatencyMetrics(): TurnLatencyMetrics {
+        return TurnLatencyMetrics(
+            turnId = turnId,
+            e2eLatencyMs = e2eLatency.toLatencyMsOrNull(),
+            transportLatencyMs = segmentedLatency.transport.toLatencyMsOrNull(),
+            algorithmProcessingLatencyMs = segmentedLatency.algorithmProcessing.toLatencyMsOrNull(),
+            asrLatencyMs = segmentedLatency.asrTTLW.toLatencyMsOrNull(),
+            llmLatencyMs = segmentedLatency.llmTTFT.toLatencyMsOrNull(),
+            ttsLatencyMs = segmentedLatency.ttsTTFB.toLatencyMsOrNull(),
+        )
+    }
+
+    private fun Double.toLatencyMs(): Int = roundToInt()
+
+    private fun Double.toLatencyMsOrNull(): Int? {
+        if (this <= 0.0) return null
+        return toLatencyMs()
     }
 
     /**
@@ -794,6 +1036,7 @@ class AgentChatViewModel : ViewModel() {
                     connectionState = ConnectionState.Idle
                 )
                 _transcriptList.value = emptyList()
+                pendingTurnLatencyMetrics.clear()
                 _agentState.value = AgentState.IDLE
                 Log.d(TAG, "Hangup completed")
             } catch (e: Exception) {

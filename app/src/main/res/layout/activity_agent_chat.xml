@@ -27,12 +27,15 @@
         android:id="@+id/tvSubtitle"
         android:layout_width="0dp"
         android:layout_height="wrap_content"
+        android:layout_marginEnd="12dp"
         android:layout_marginTop="2dp"
         android:layout_marginBottom="12dp"
+        android:ellipsize="end"
+        android:maxLines="1"
         android:text="Real-time Voice Conversation Demo"
         android:textColor="@color/text_subtitle"
         android:textSize="13sp"
-        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintEnd_toStartOf="@id/btnSettings"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toTopOf="parent" />
 
@@ -41,6 +44,8 @@
         android:layout_width="0dp"
         android:layout_height="wrap_content"
         android:layout_marginTop="2dp"
+        android:ellipsize="end"
+        android:maxLines="1"
         android:textColor="@color/text_tertiary"
         android:textSize="12sp"
         app:layout_constraintEnd_toEndOf="@id/tvSubtitle"
@@ -85,32 +90,21 @@
         android:id="@+id/cardTranscript"
         android:layout_width="0dp"
         android:layout_height="0dp"
-        android:layout_marginTop="8dp"
-        android:layout_marginBottom="88dp"
-        app:cardBackgroundColor="@color/bg_card"
-        app:cardCornerRadius="12dp"
+        android:layout_marginTop="6dp"
+        android:layout_marginBottom="8dp"
+        app:cardBackgroundColor="@android:color/transparent"
+        app:cardCornerRadius="0dp"
         app:cardElevation="0dp"
-        app:strokeColor="@color/border_default"
-        app:strokeWidth="1dp"
-        app:layout_constraintBottom_toBottomOf="parent"
+        app:strokeWidth="0dp"
+        app:layout_constraintBottom_toTopOf="@id/llControls"
         app:layout_constraintEnd_toEndOf="parent"
+        app:layout_goneMarginBottom="88dp"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toBottomOf="@id/cardLog">
 
         <androidx.constraintlayout.widget.ConstraintLayout
             android:layout_width="match_parent"
             android:layout_height="match_parent">
-
-            <androidx.recyclerview.widget.RecyclerView
-                android:id="@+id/rvTranscript"
-                android:layout_width="0dp"
-                android:layout_height="0dp"
-                android:clipToPadding="false"
-                android:scrollbars="vertical"
-                app:layout_constraintBottom_toTopOf="@id/llAgentStatus"
-                app:layout_constraintEnd_toEndOf="parent"
-                app:layout_constraintStart_toStartOf="parent"
-                app:layout_constraintTop_toBottomOf="@id/llCapabilityPanel" />
 
             <LinearLayout
                 android:id="@+id/llCapabilityPanel"
@@ -187,33 +181,124 @@
             </LinearLayout>
 
             <LinearLayout
-                android:id="@+id/llAgentStatus"
+                android:id="@+id/llTranscriptHeader"
                 android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:background="@color/bg_control_bar"
-                android:gravity="center"
+                android:layout_height="36dp"
+                android:layout_marginStart="4dp"
+                android:layout_marginTop="2dp"
+                android:layout_marginEnd="4dp"
+                android:gravity="center_vertical"
                 android:orientation="horizontal"
-                android:padding="12dp"
+                app:layout_constraintEnd_toEndOf="parent"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintTop_toBottomOf="@id/llCapabilityPanel">
+
+                <LinearLayout
+                    android:id="@+id/llAgentStatus"
+                    android:layout_width="0dp"
+                    android:layout_height="match_parent"
+                    android:layout_weight="1"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal">
+
+                    <View
+                        android:id="@+id/viewStatusDot"
+                        android:layout_width="8dp"
+                        android:layout_height="8dp"
+                        android:background="@drawable/bg_status_dot" />
+
+                    <TextView
+                        android:id="@+id/tvAgentStatus"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="8dp"
+                        android:layout_weight="1"
+                        android:ellipsize="end"
+                        android:maxLines="1"
+                        android:text="Idle"
+                        android:textColor="@color/state_idle"
+                        android:textSize="13sp"
+                        android:textStyle="bold"
+                        tools:text="Speaking" />
+                </LinearLayout>
+
+                <LinearLayout
+                    android:id="@+id/llRealtimeDataToggle"
+                    android:layout_width="wrap_content"
+                    android:layout_height="24dp"
+                    android:background="@drawable/bg_realtime_data_toggle"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal"
+                    android:paddingStart="8dp"
+                    android:paddingEnd="6dp">
+
+                    <TextView
+                        android:id="@+id/tvRealtimeDataToggle"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:includeFontPadding="false"
+                        android:text="Real-time Data"
+                        android:textColor="@color/text_subtitle"
+                        android:textSize="10sp" />
+
+                    <androidx.appcompat.widget.SwitchCompat
+                        android:id="@+id/switchRealtimeData"
+                        android:layout_width="36dp"
+                        android:layout_height="24dp"
+                        android:layout_marginStart="4dp"
+                        android:checked="true"
+                        android:minWidth="0dp"
+                        android:padding="0dp"
+                        android:showText="false"
+                        android:splitTrack="false"
+                        android:textOff=""
+                        android:textOn=""
+                        android:thumb="@drawable/bg_switch_thumb"
+                        app:track="@drawable/bg_switch_track" />
+                </LinearLayout>
+            </LinearLayout>
+
+            <androidx.recyclerview.widget.RecyclerView
+                android:id="@+id/rvTranscript"
+                android:layout_width="0dp"
+                android:layout_height="0dp"
+                android:clipToPadding="false"
+                android:paddingTop="2dp"
+                android:scrollbars="vertical"
                 app:layout_constraintBottom_toBottomOf="parent"
                 app:layout_constraintEnd_toEndOf="parent"
-                app:layout_constraintStart_toStartOf="parent">
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintTop_toBottomOf="@id/llTranscriptHeader" />
 
-                <View
-                    android:id="@+id/viewStatusDot"
-                    android:layout_width="8dp"
-                    android:layout_height="8dp"
-                    android:background="@drawable/bg_status_dot" />
+            <LinearLayout
+                android:id="@+id/llInterruptPanel"
+                android:layout_width="0dp"
+                android:layout_height="56dp"
+                android:background="@android:color/transparent"
+                android:gravity="center"
+                android:paddingBottom="10dp"
+                android:visibility="gone"
+                app:layout_constraintBottom_toBottomOf="parent"
+                app:layout_constraintEnd_toEndOf="parent"
+                app:layout_constraintStart_toStartOf="parent"
+                tools:visibility="visible">
 
-                <TextView
-                    android:id="@+id/tvAgentStatus"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_marginStart="8dp"
-                    android:text="Idle"
-                    android:textColor="@color/state_idle"
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btnInterrupt"
+                    android:layout_width="128dp"
+                    android:layout_height="38dp"
+                    android:background="@drawable/selector_button_interrupt"
+                    android:letterSpacing="0"
+                    android:minWidth="0dp"
+                    android:text="Interrupt"
+                    android:textAllCaps="false"
+                    android:textColor="@color/text_subtitle"
                     android:textSize="13sp"
                     android:textStyle="bold"
-                    tools:text="Speaking" />
+                    app:backgroundTint="@null"
+                    app:cornerRadius="8dp"
+                    app:elevation="0dp"
+                    app:rippleColor="#33FFFFFF" />
             </LinearLayout>
         </androidx.constraintlayout.widget.ConstraintLayout>
     </com.google.android.material.card.MaterialCardView>
@@ -252,10 +337,12 @@
     <LinearLayout
         android:id="@+id/llControls"
         android:layout_width="0dp"
-        android:layout_height="wrap_content"
+        android:layout_height="80dp"
         android:layout_marginBottom="16dp"
         android:gravity="center"
         android:orientation="horizontal"
+        android:paddingStart="42dp"
+        android:paddingEnd="42dp"
         android:visibility="gone"
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintEnd_toEndOf="parent"
@@ -264,36 +351,46 @@
 
         <androidx.appcompat.widget.AppCompatImageButton
             android:id="@+id/btnMute"
-            android:layout_width="56dp"
-            android:layout_height="56dp"
+            android:layout_width="64dp"
+            android:layout_height="64dp"
             android:background="@drawable/bg_button_mute_selector"
             android:contentDescription="Mute/Unmute"
-            android:padding="14dp"
+            android:padding="16dp"
             android:scaleType="centerInside"
             app:srcCompat="@drawable/ic_mic"
             app:tint="@color/mic_normal_icon" />
 
         <Space
-            android:layout_width="8dp"
-            android:layout_height="1dp" />
-
-        <com.google.android.material.button.MaterialButton
-            android:id="@+id/btnStop"
             android:layout_width="0dp"
-            android:layout_height="56dp"
-            android:layout_weight="1.4"
-            android:background="@drawable/selector_button_hangup"
-            android:letterSpacing="0"
-            android:minWidth="0dp"
-            android:text="Stop"
-            android:textAllCaps="false"
-            android:textColor="@color/white"
-            android:textSize="15sp"
-            android:textStyle="bold"
-            app:backgroundTint="@null"
-            app:cornerRadius="8dp"
-            app:elevation="0dp"
-            app:rippleColor="#33FFFFFF" />
+            android:layout_height="1dp"
+            android:layout_weight="1" />
+
+        <androidx.appcompat.widget.AppCompatImageButton
+            android:id="@+id/btnChat"
+            android:layout_width="64dp"
+            android:layout_height="64dp"
+            android:background="@drawable/bg_button_mute_selector"
+            android:contentDescription="Send chat message"
+            android:padding="17dp"
+            android:scaleType="centerInside"
+            app:srcCompat="@drawable/ic_message_text"
+            app:tint="@color/white" />
+
+        <Space
+            android:layout_width="0dp"
+            android:layout_height="1dp"
+            android:layout_weight="1" />
+
+        <androidx.appcompat.widget.AppCompatImageButton
+            android:id="@+id/btnStop"
+            android:layout_width="64dp"
+            android:layout_height="64dp"
+            android:background="@drawable/bg_button_mute_selector"
+            android:contentDescription="Stop Agent"
+            android:padding="16dp"
+            android:scaleType="centerInside"
+            app:srcCompat="@drawable/ic_close"
+            app:tint="@color/error_red_light" />
     </LinearLayout>
 
 </androidx.constraintlayout.widget.ConstraintLayout>

@@ -39,11 +39,6 @@ class ManualTurnDemoUiTest {
                 connectionState = AgentChatViewModel.ConnectionState.Idle
             ).canChangeTurnDetectionMode
         )
-        assertTrue(
-            AgentChatViewModel.ConversationUiState(
-                connectionState = AgentChatViewModel.ConnectionState.Error
-            ).canChangeTurnDetectionMode
-        )
         assertFalse(
             AgentChatViewModel.ConversationUiState(
                 connectionState = AgentChatViewModel.ConnectionState.Connecting

@@ -1,15 +1,22 @@
 package io.agora.agent.toolkit.sample.ui
 
+import android.content.Context
 import android.graphics.drawable.GradientDrawable
+import android.text.InputType
 import android.text.SpannableStringBuilder
 import android.text.Spanned
 import android.text.style.ForegroundColorSpan
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import android.view.WindowManager
+import android.view.inputmethod.EditorInfo
+import android.view.inputmethod.InputMethodManager
 import android.widget.ScrollView
 import android.widget.Toast
 import androidx.core.content.ContextCompat
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.DiffUtil
@@ -21,6 +28,7 @@ import com.google.android.material.button.MaterialButton
 import io.agora.agent.toolkit.BuildConfig
 import io.agora.agent.toolkit.R
 import io.agora.agent.toolkit.databinding.ActivityAgentChatBinding
+import io.agora.agent.toolkit.databinding.BottomSheetChatMessageBinding
 import io.agora.agent.toolkit.databinding.BottomSheetSettingsBinding
 import io.agora.agent.toolkit.databinding.ItemTranscriptAgentBinding
 import io.agora.agent.toolkit.databinding.ItemTranscriptUserBinding
@@ -29,7 +37,6 @@ import io.agora.agent.toolkit.sample.tools.PermissionHelp
 import io.agora.agent.toolkit.sample.ui.common.BaseActivity
 import io.agora.conversational.api.AgentState
 import io.agora.conversational.api.ConversationalAIAPI_VERSION
-import io.agora.conversational.api.Transcript
 import io.agora.conversational.api.TranscriptType
 import kotlinx.coroutines.launch
 
@@ -46,6 +53,11 @@ class AgentChatActivity : BaseActivity<ActivityAgentChatBinding>() {
     // Track whether to automatically scroll to bottom
     private var autoScrollToBottom = true
     private var isScrollBottom = false
+
+    private enum class ChatMessageMode {
+        TEXT,
+        IMAGE
+    }
 
     override fun getViewBinding(): ActivityAgentChatBinding {
         return ActivityAgentChatBinding.inflate(layoutInflater)
@@ -68,10 +80,19 @@ class AgentChatActivity : BaseActivity<ActivityAgentChatBinding>() {
 
     override fun initView() {
         mBinding?.apply {
-            setOnApplyWindowInsetsListener(root)
+            applyChatInsets(root)
 
             // Setup RecyclerView for transcript list
             setupRecyclerView()
+
+            switchRealtimeData.isChecked = true
+            transcriptAdapter.setLatencyMetricsVisible(switchRealtimeData.isChecked)
+            llRealtimeDataToggle.setOnClickListener {
+                switchRealtimeData.isChecked = !switchRealtimeData.isChecked
+            }
+            switchRealtimeData.setOnCheckedChangeListener { _, isChecked ->
+                transcriptAdapter.setLatencyMetricsVisible(isChecked)
+            }
 
             // Start button click listener
             btnStart.setOnClickListener {
@@ -97,10 +118,36 @@ class AgentChatActivity : BaseActivity<ActivityAgentChatBinding>() {
                 viewModel.manualEOS()
             }
 
+            btnChat.setOnClickListener {
+                showChatMessageSheet()
+            }
+
+            btnInterrupt.setOnClickListener {
+                viewModel.sendInterrupt()
+            }
+
             // Stop button click listener
             btnStop.setOnClickListener {
                 viewModel.hangup()
             }
+        }
+    }
+
+    private fun applyChatInsets(root: View) {
+        val initialLeft = root.paddingLeft
+        val initialTop = root.paddingTop
+        val initialRight = root.paddingRight
+        val initialBottom = root.paddingBottom
+        ViewCompat.setOnApplyWindowInsetsListener(root) { view, insets ->
+            val systemBars = insets.getInsets(WindowInsetsCompat.Type.systemBars())
+            val ime = insets.getInsets(WindowInsetsCompat.Type.ime())
+            view.setPadding(
+                initialLeft + systemBars.left,
+                initialTop + systemBars.top,
+                initialRight + systemBars.right,
+                initialBottom + maxOf(systemBars.bottom, ime.bottom)
+            )
+            insets
         }
     }
 
@@ -143,6 +190,94 @@ class AgentChatActivity : BaseActivity<ActivityAgentChatBinding>() {
                 ).show()
             }
         }
+    }
+
+    private fun showChatMessageSheet() {
+        val sheetBinding = BottomSheetChatMessageBinding.inflate(layoutInflater)
+        val dialog = BottomSheetDialog(this)
+        var mode = ChatMessageMode.TEXT
+
+        fun applyMode(newMode: ChatMessageMode) {
+            mode = newMode
+            val isTextMode = mode == ChatMessageMode.TEXT
+            sheetBinding.btnChatModeText.setBackgroundResource(
+                if (isTextMode) R.drawable.selector_chat_mode_selected else R.drawable.selector_chat_mode_unselected
+            )
+            sheetBinding.btnChatModeText.setTextColor(
+                ContextCompat.getColor(this, if (isTextMode) R.color.white else R.color.text_subtitle)
+            )
+            sheetBinding.btnChatModeText.setIconTintResource(
+                if (isTextMode) R.color.white else R.color.text_subtitle
+            )
+            sheetBinding.btnChatModeImage.setBackgroundResource(
+                if (isTextMode) R.drawable.selector_chat_mode_unselected else R.drawable.selector_chat_mode_selected
+            )
+            sheetBinding.btnChatModeImage.setTextColor(
+                ContextCompat.getColor(this, if (isTextMode) R.color.text_subtitle else R.color.white)
+            )
+            sheetBinding.btnChatModeImage.setIconTintResource(
+                if (isTextMode) R.color.text_subtitle else R.color.white
+            )
+            sheetBinding.etChatMessage.hint = if (isTextMode) "Type a message" else "Paste image URL"
+            sheetBinding.etChatMessage.inputType = if (isTextMode) {
+                InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_CAP_SENTENCES
+            } else {
+                InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_URI
+            }
+            sheetBinding.etChatMessage.setSingleLine(true)
+        }
+
+        fun sendMessage(): Boolean {
+            val input = sheetBinding.etChatMessage.text?.toString().orEmpty()
+            val sent = when (mode) {
+                ChatMessageMode.TEXT -> viewModel.sendTextMessage(input)
+                ChatMessageMode.IMAGE -> viewModel.sendImageUrlMessage(input)
+            }
+            if (sent) {
+                dialog.dismiss()
+            }
+            return sent
+        }
+
+        dialog.setContentView(sheetBinding.root)
+        dialog.window?.setSoftInputMode(
+            WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE or
+                WindowManager.LayoutParams.SOFT_INPUT_STATE_ALWAYS_VISIBLE
+        )
+        dialog.setOnShowListener {
+            dialog.findViewById<View>(com.google.android.material.R.id.design_bottom_sheet)
+                ?.setBackgroundResource(R.drawable.bg_bottom_sheet)
+            sheetBinding.etChatMessage.requestFocus()
+            sheetBinding.etChatMessage.post {
+                val inputMethodManager =
+                    getSystemService(Context.INPUT_METHOD_SERVICE) as? InputMethodManager
+                inputMethodManager?.showSoftInput(
+                    sheetBinding.etChatMessage,
+                    InputMethodManager.SHOW_IMPLICIT
+                )
+            }
+        }
+
+        sheetBinding.btnChatModeText.setOnClickListener {
+            applyMode(ChatMessageMode.TEXT)
+        }
+        sheetBinding.btnChatModeImage.setOnClickListener {
+            applyMode(ChatMessageMode.IMAGE)
+        }
+        sheetBinding.btnSendChatMessage.setOnClickListener {
+            sendMessage()
+        }
+        sheetBinding.etChatMessage.setOnEditorActionListener { _, actionId, _ ->
+            if (actionId == EditorInfo.IME_ACTION_SEND) {
+                sendMessage()
+                true
+            } else {
+                false
+            }
+        }
+
+        applyMode(ChatMessageMode.TEXT)
+        dialog.show()
     }
 
     private fun showSettingsSheet() {
@@ -331,6 +466,11 @@ class AgentChatActivity : BaseActivity<ActivityAgentChatBinding>() {
                     // Show/hide buttons
                     llStart.visibility = if (isConnected) View.GONE else View.VISIBLE
                     llControls.visibility = if (isConnected) View.VISIBLE else View.GONE
+                    llInterruptPanel.visibility = if (isConnected) View.VISIBLE else View.GONE
+                    updateTranscriptBottomPadding(isConnected)
+                    val messageControlsEnabled = isConnected
+                    btnChat.isEnabled = messageControlsEnabled
+                    btnInterrupt.isEnabled = messageControlsEnabled
                     tvTurnDetectionMode.text =
                         "SOS: ${state.sosDetectionMode.displayName}  |  " +
                             "EOS: ${state.eosDetectionMode.displayName}"
@@ -352,19 +492,12 @@ class AgentChatActivity : BaseActivity<ActivityAgentChatBinding>() {
                     btnManualEos.visibility = if (state.isManualEosEnabled) View.VISIBLE else View.GONE
 
                     // Update button style based on connection state
-                    val isError = state.connectionState == AgentChatViewModel.ConnectionState.Error
                     when {
                         isConnecting -> {
                             btnStart.text = "Connecting..."
                             btnStart.isEnabled = false
                             btnStart.setBackgroundResource(R.drawable.bg_start_button_disabled)
                             btnStart.setTextColor(ContextCompat.getColor(this@AgentChatActivity, R.color.btn_disabled_text))
-                        }
-                        isError -> {
-                            btnStart.text = "Retry"
-                            btnStart.isEnabled = true
-                            btnStart.setBackgroundResource(R.drawable.bg_start_button_error)
-                            btnStart.setTextColor(ContextCompat.getColor(this@AgentChatActivity, R.color.white))
                         }
                         else -> {
                             btnStart.text = "Start Agent"
@@ -417,6 +550,19 @@ class AgentChatActivity : BaseActivity<ActivityAgentChatBinding>() {
                 }
             }
         }
+    }
+
+    private fun updateTranscriptBottomPadding(showInterrupt: Boolean) {
+        mBinding?.rvTranscript?.apply {
+            val bottomPadding = if (showInterrupt) 58.dpToPx() else 0
+            if (paddingBottom != bottomPadding) {
+                setPadding(paddingLeft, paddingTop, paddingRight, bottomPadding)
+            }
+        }
+    }
+
+    private fun Int.dpToPx(): Int {
+        return (this * resources.displayMetrics.density + 0.5f).toInt()
     }
 
     private fun observeTranscriptList() {
@@ -504,15 +650,22 @@ class AgentChatActivity : BaseActivity<ActivityAgentChatBinding>() {
 /**
  * Adapter for displaying transcript list with different view types for USER and AGENT
  */
-class TranscriptAdapter : ListAdapter<Transcript, RecyclerView.ViewHolder>(TranscriptDiffCallback()) {
+class TranscriptAdapter : ListAdapter<AgentChatViewModel.TranscriptItem, RecyclerView.ViewHolder>(TranscriptDiffCallback()) {
+    private var isLatencyMetricsVisible = true
 
     companion object {
         private const val VIEW_TYPE_USER = 0
         private const val VIEW_TYPE_AGENT = 1
     }
 
+    fun setLatencyMetricsVisible(visible: Boolean) {
+        if (isLatencyMetricsVisible == visible) return
+        isLatencyMetricsVisible = visible
+        notifyDataSetChanged()
+    }
+
     override fun getItemViewType(position: Int): Int {
-        return when (getItem(position).type) {
+        return when (getItem(position).transcript.type) {
             TranscriptType.USER -> VIEW_TYPE_USER
             TranscriptType.AGENT -> VIEW_TYPE_AGENT
         }
@@ -533,10 +686,10 @@ class TranscriptAdapter : ListAdapter<Transcript, RecyclerView.ViewHolder>(Trans
     }
 
     override fun onBindViewHolder(holder: RecyclerView.ViewHolder, position: Int) {
-        val transcript = getItem(position)
+        val item = getItem(position)
         when (holder) {
-            is UserViewHolder -> holder.bind(transcript)
-            is AgentViewHolder -> holder.bind(transcript)
+            is UserViewHolder -> holder.bind(item)
+            is AgentViewHolder -> holder.bind(item, isLatencyMetricsVisible)
         }
     }
 
@@ -544,8 +697,8 @@ class TranscriptAdapter : ListAdapter<Transcript, RecyclerView.ViewHolder>(Trans
      * ViewHolder for USER transcript items (right-aligned with "Me" avatar)
      */
     class UserViewHolder(private val binding: ItemTranscriptUserBinding) : RecyclerView.ViewHolder(binding.root) {
-        fun bind(transcript: Transcript) {
-            binding.tvTranscriptText.text = transcript.text.ifEmpty { "..." }
+        fun bind(item: AgentChatViewModel.TranscriptItem) {
+            binding.tvTranscriptText.text = item.transcript.text.ifEmpty { "..." }
         }
     }
 
@@ -553,17 +706,56 @@ class TranscriptAdapter : ListAdapter<Transcript, RecyclerView.ViewHolder>(Trans
      * ViewHolder for AGENT transcript items (left-aligned with "AI" avatar)
      */
     class AgentViewHolder(private val binding: ItemTranscriptAgentBinding) : RecyclerView.ViewHolder(binding.root) {
-        fun bind(transcript: Transcript) {
-            binding.tvTranscriptText.text = transcript.text.ifEmpty { "..." }
+        fun bind(item: AgentChatViewModel.TranscriptItem, isLatencyMetricsVisible: Boolean) {
+            binding.tvTranscriptText.text = item.transcript.text.ifEmpty { "..." }
+            bindLatencyMetrics(item.latencyMetrics, isLatencyMetricsVisible)
+        }
+
+        private fun bindLatencyMetrics(
+            metrics: AgentChatViewModel.TurnLatencyMetrics?,
+            isLatencyMetricsVisible: Boolean
+        ) {
+            val shouldShow = isLatencyMetricsVisible && metrics != null
+            binding.llLatencyMetrics.visibility = if (shouldShow) View.VISIBLE else View.GONE
+            if (metrics == null) {
+                binding.tvLatencyTurn.text = ""
+                binding.tvLatencySummary.text = ""
+                return
+            }
+
+            binding.tvLatencyTurn.text = "#${metrics.turnId}"
+            binding.tvLatencySummary.text = buildLatencySummary(metrics)
+        }
+
+        private fun buildLatencySummary(metrics: AgentChatViewModel.TurnLatencyMetrics): String {
+            return listOf(
+                "E2E:${metrics.e2eLatencyMs.toLatencyText()}",
+                "RTC:${metrics.transportLatencyMs.toLatencyText()}",
+                "AI:${metrics.algorithmProcessingLatencyMs.toLatencyText()}",
+                "ASR:${metrics.asrLatencyMs.toLatencyText()}",
+                "LLM:${metrics.llmLatencyMs.toLatencyText()}",
+                "TTS:${metrics.ttsLatencyMs.toLatencyText()}"
+            ).joinToString(separator = "  ")
+        }
+
+        private fun Int?.toLatencyText(): String {
+            return this?.let { "${it}ms" } ?: "--"
         }
     }
 
-    private class TranscriptDiffCallback : DiffUtil.ItemCallback<Transcript>() {
-        override fun areItemsTheSame(oldItem: Transcript, newItem: Transcript): Boolean {
-            return oldItem.turnId == newItem.turnId && oldItem.type == newItem.type
+    private class TranscriptDiffCallback : DiffUtil.ItemCallback<AgentChatViewModel.TranscriptItem>() {
+        override fun areItemsTheSame(
+            oldItem: AgentChatViewModel.TranscriptItem,
+            newItem: AgentChatViewModel.TranscriptItem
+        ): Boolean {
+            return oldItem.transcript.turnId == newItem.transcript.turnId &&
+                oldItem.transcript.type == newItem.transcript.type
         }
 
-        override fun areContentsTheSame(oldItem: Transcript, newItem: Transcript): Boolean {
+        override fun areContentsTheSame(
+            oldItem: AgentChatViewModel.TranscriptItem,
+            newItem: AgentChatViewModel.TranscriptItem
+        ): Boolean {
             return oldItem == newItem
         }
     }

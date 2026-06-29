@@ -10,14 +10,17 @@ Current scope:
 - RTC join + RTM login
 - Startup-time selection for independent SOS / EOS turn detection
 - Real-time transcript rendering
+- Optional completed-turn latency metrics
 - Agent status rendering
 - Mute / unmute
+- Text message sending
+- Image URL message sending
+- Agent interrupt
 - Manual SOS / EOS trigger buttons shown by selected detection modes
 - Stop Agent and cleanup
 
 Out of scope for this quickstart:
 
-- Text or image message sending UI
 - Multi-screen business flow
 - Backend-owned token / agent startup flow
 
@@ -29,15 +32,16 @@ The Activity page is intentionally single-page and is organized into these regio
 - log panel
 - transcript panel
 - capability panel inside the transcript area for optional component abilities
-- bottom agent status bar
-- bottom start / retry / mute / stop controls
+- transcript header with agent status and real-time data toggle
+- bottom start / mute / chat / stop controls
+- interrupt action over the transcript panel while connected
 
 ## Project Structure
 
 ```text
 app/src/main/java/
 └── io/agora/agent/toolkit/sample/
-    ├── ui/            # AgentChatActivity + ViewModel + manual turn UI helpers
+    ├── ui/            # AgentChatActivity + ViewModel + manual turn / chat UI helpers
     ├── api/           # AgentStarter + TokenGenerator + OkHttp config
     ├── tools/         # Permission helpers
     ├── KeyCenter.kt
@@ -92,6 +96,27 @@ The current UI renders:
 
 - agent transcript on the left with `AI`
 - user transcript on the right with `Me`
+- optional completed-turn latency metrics for agent messages
+
+## Chat / Interrupt Flow
+
+```text
+Tap chat
+  → choose Text or Image URL
+  → AgentChatViewModel.sendTextMessage(...) / sendImageUrlMessage(...)
+  → ConversationalAIAPI.chat(agentUserId, TextMessage/ImageMessage, completion)
+  → onMessageReceiptUpdated / onMessageError
+  → debugLogList update
+
+Tap Interrupt
+  → AgentChatViewModel.sendInterrupt()
+  → ConversationalAIAPI.interrupt(agentUserId, completion)
+  → onAgentInterrupted / state callback updates
+```
+
+The message sheet accepts natural language text or an HTTP(S) image URL. Empty
+messages are rejected locally before publishing. Message receipts and errors are
+shown in the log panel.
 
 ## Manual Turn Flow
 
@@ -120,9 +145,9 @@ action is visible only when `EOS = manual`.
 ## UI State Rendering
 
 ```text
-uiState        → Start / Connecting / Retry / Mute / Stop buttons + optional capability panel
-agentState     → bottom status bar color + text
-transcriptList → transcript panel content
+uiState        → Start / Connecting / Mute / Chat / Stop buttons + optional capability and interrupt panels
+agentState     → transcript header status color + text
+transcriptList → transcript panel content + optional latency metrics
 debugLogList   → log panel content
 ```
 
