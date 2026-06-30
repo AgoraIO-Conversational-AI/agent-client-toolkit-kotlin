@@ -22,7 +22,7 @@ The toolkit expects the host app to provide Agora RTC and RTM SDK instances:
 ```kotlin
 dependencies {
     implementation("io.agora.rtc:full-sdk:4.5.1")
-    implementation("io.agora:agora-rtm-lite:2.2.6")
+    implementation("io.agora:agora-rtm-lite:2.2.3")
 }
 ```
 

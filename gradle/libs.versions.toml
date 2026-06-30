@@ -10,7 +10,7 @@ material = "1.13.0"
 constraintlayout = "2.2.0"
 
 agora-rtc = "4.5.1"
-agora-rtm = "2.2.6"
+agora-rtm = "2.2.3"
 
 okhttp = "5.0.0-alpha.14"
 retrofit = "2.11.0"

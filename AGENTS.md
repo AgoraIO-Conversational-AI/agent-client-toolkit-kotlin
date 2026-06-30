@@ -59,7 +59,7 @@ Current quickstart scope is limited to voice session startup, independent startu
 | State Management | ViewModel + StateFlow |
 | Networking | OkHttp 5.0.0-alpha.14 |
 | RTC SDK | Agora RTC SDK (`io.agora.rtc:full-sdk:4.5.1`) |
-| RTM SDK | Agora RTM SDK (`io.agora:agora-rtm-lite:2.2.6`) |
+| RTM SDK | Agora RTM SDK (`io.agora:agora-rtm-lite:2.2.3`) |
 | Coroutines | Kotlin Coroutines 1.9.0 |
 | ConversationalAIAPI | Standalone `:conversational-ai` Gradle module |
 

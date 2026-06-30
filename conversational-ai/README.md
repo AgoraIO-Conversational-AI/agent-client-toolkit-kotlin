@@ -14,7 +14,7 @@ See the root [README.md](../README.md) for Maven dependency setup.
 |-------------|---------|
 | Android minSdk | 26+ |
 | Agora RTC SDK | `io.agora.rtc:full-sdk:4.5.1` |
-| Agora RTM SDK | `io.agora:agora-rtm-lite:2.2.6` |
+| Agora RTM SDK | `io.agora:agora-rtm-lite:2.2.3` |
 | Kotlin | 2.0.21 |
 
 The host app owns:
