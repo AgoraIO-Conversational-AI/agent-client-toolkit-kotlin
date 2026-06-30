@@ -4,14 +4,6 @@ plugins {
     id 'maven-publish'
 }
 
-def convoAiApiVersionProps = new Properties()
-def convoAiApiVersionFile = rootProject.file("lib/version.properties")
-if (convoAiApiVersionFile.exists()) {
-    convoAiApiVersionFile.withInputStream { stream ->
-        convoAiApiVersionProps.load(stream)
-    }
-}
-
 def publishedGroupId = "io.agora.agents"
 def publishedArtifactId = "agora-agent-client-toolkit"
 def projectUrl = "https://github.com/AgoraIO-Conversational-AI/agent-client-toolkit-kotlin"
@@ -19,10 +11,9 @@ def scmUrl = "https://github.com/AgoraIO-Conversational-AI/agent-client-toolkit-
 def scmDeveloperUrl = "ssh://git@github.com/AgoraIO-Conversational-AI/agent-client-toolkit-kotlin.git"
 def rehoboamGroupId = findProperty("REHOBOAM_GROUP_ID") ?: System.getenv("REHOBOAM_GROUP_ID") ?: publishedGroupId
 def consumerMinCompileSdk = (findProperty("CONVOAI_API_MIN_COMPILE_SDK") ?: System.getenv("CONVOAI_API_MIN_COMPILE_SDK") ?: rootProject.ext.minSdkVersion).toString().toInteger()
-def moduleVersion = convoAiApiVersionProps.getProperty("CONVOAI_API_VERSION") ?: "0.1.0-SNAPSHOT"
 
 group = publishedGroupId
-version = findProperty("CONVOAI_API_VERSION") ?: System.getenv("CONVOAI_API_VERSION") ?: moduleVersion
+version = findProperty("VERSION") ?: System.getenv("VERSION") ?: "0.1.0-SNAPSHOT"
 
 android {
     namespace = 'io.agora.agents.toolkit'
@@ -118,7 +109,7 @@ tasks.register("packageMavenReleaseZip", Zip) {
 
     doFirst {
         if (releaseVersion.endsWith("-SNAPSHOT")) {
-            throw new GradleException("Maven release zip requires a non-SNAPSHOT version. Update lib/version.properties or pass -PCONVOAI_API_VERSION=<release>.")
+            throw new GradleException("Maven release zip requires a non-SNAPSHOT version. Use VERSION=<release> scripts/build_rehoboam_maven_input_zip.sh or pass -PVERSION=<release>.")
         }
     }
 

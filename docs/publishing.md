@@ -1,6 +1,6 @@
 # Publishing
 
-This document is for maintainers who need to package the Android library for Maven / AAR publishing.
+This document is for maintainers who need to prepare the Android Maven / AAR upload package for Rehoboam.
 
 ## Artifact Coordinates
 
@@ -8,16 +8,10 @@ This document is for maintainers who need to package the Android library for Mav
 io.agora.agents:agora-agent-client-toolkit:<version>
 ```
 
-The release version comes from `lib/version.properties`:
-
-```properties
-CONVOAI_API_VERSION=2.9.0
-```
-
-You can override the version for a local packaging run with:
+For Rehoboam packaging, pass the version explicitly:
 
 ```bash
-./gradlew :conversational-ai:packageMavenReleaseZip -PCONVOAI_API_VERSION=<version>
+VERSION=<version> scripts/build_rehoboam_maven_input_zip.sh
 ```
 
 ## Release Strategy
@@ -45,12 +39,12 @@ Version guidance:
 - Backward-compatible feature: `2.9.0` -> `2.10.0`
 - Breaking API change: `2.9.0` -> `3.0.0`
 
-## Package the Maven Release Zip
+## Package the Rehoboam Maven Input Zip
 
 Run:
 
 ```bash
-./gradlew :conversational-ai:packageMavenReleaseZip
+VERSION=2.9.0-rc.1 scripts/build_rehoboam_maven_input_zip.sh
 ```
 
 The generated zip is:
@@ -92,7 +86,7 @@ unzip -p conversational-ai/build/distributions/agora-agent-client-toolkit-<versi
 
 ## Pre-Publish Checklist
 
-1. `CONVOAI_API_VERSION` is a non-SNAPSHOT version.
+1. The release version is a non-SNAPSHOT version, for example `2.9.0-rc.1` or `2.9.0`.
 2. Before publishing the final version, a release candidate has passed sample / clean-app validation.
 3. Unit tests pass:
 
@@ -100,10 +94,10 @@ unzip -p conversational-ai/build/distributions/agora-agent-client-toolkit-<versi
    ./gradlew :app:testDebugUnitTest :conversational-ai:testDebugUnitTest
    ```
 
-4. The package task succeeds:
+4. The package script succeeds:
 
    ```bash
-   ./gradlew :conversational-ai:packageMavenReleaseZip
+   VERSION=2.9.0-rc.1 scripts/build_rehoboam_maven_input_zip.sh
    ```
 
 5. The packaged POM includes `url` and `scm`.

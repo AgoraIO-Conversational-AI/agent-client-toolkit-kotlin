@@ -314,7 +314,7 @@ Release strategy:
 To prepare the Rehoboam upload zip:
 
 ```bash
-./gradlew :conversational-ai:packageMavenReleaseZip
+VERSION=2.9.0-rc.1 scripts/build_rehoboam_maven_input_zip.sh
 ```
 
 The generated zip is:
@@ -339,7 +339,7 @@ Rehoboam form values for this single-AAR module:
 |-------|-------|
 | `Release Channel` | `Maven / AAR` |
 | `Group ID` | `io.agora.agents` |
-| `Artifacts Version` | Same as `lib/version.properties` / `CONVOAI_API_VERSION` |
+| `Artifacts Version` | Same as the explicit `VERSION` passed to `scripts/build_rehoboam_maven_input_zip.sh` |
 | `File Link / File URL` | Jenkins-accessible URL for the generated zip |
 | `Part Release List / SO_LIST` | Empty for full release |
 | `Subspec Publish` | Off |
