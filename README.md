@@ -153,6 +153,7 @@ choice of SOS / EOS detection mode.
 
 ## Maintainers
 
+For release notes, see [CHANGELOG.md](./CHANGELOG.md).
 For Maven / AAR packaging, see [docs/publishing.md](./docs/publishing.md).
 
 ## License

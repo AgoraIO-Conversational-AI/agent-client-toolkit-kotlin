@@ -1,5 +1,7 @@
 package io.agora.agent.toolkit.sample.ui
 
+import android.content.ClipData
+import android.content.ClipboardManager
 import android.content.Context
 import android.graphics.drawable.GradientDrawable
 import android.text.InputType
@@ -131,6 +133,16 @@ class AgentChatActivity : BaseActivity<ActivityAgentChatBinding>() {
                 viewModel.hangup()
             }
         }
+    }
+
+    private fun copyAgentId(agentId: String) {
+        if (agentId.isBlank()) {
+            Toast.makeText(this, "Agent ID is not available", Toast.LENGTH_SHORT).show()
+            return
+        }
+        val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+        clipboard.setPrimaryClip(ClipData.newPlainText("Agent ID", agentId))
+        Toast.makeText(this, "Agent ID copied", Toast.LENGTH_SHORT).show()
     }
 
     private fun applyChatInsets(root: View) {
@@ -298,6 +310,14 @@ class AgentChatActivity : BaseActivity<ActivityAgentChatBinding>() {
         sheetBinding.tvTurnEosDetectionLabel.setTextColor(optionTextColor)
         sheetBinding.tvVersionInfo.text =
             "Demo v${BuildConfig.VERSION_NAME}  |  Component v$ConversationalAIAPI_VERSION"
+        val agentId = state.agentId.orEmpty()
+        sheetBinding.rowAgentId.visibility = if (agentId.isNotBlank()) View.VISIBLE else View.GONE
+        sheetBinding.dividerAgentId.visibility =
+            if (agentId.isNotBlank()) View.VISIBLE else View.GONE
+        sheetBinding.tvAgentId.text = agentId
+        sheetBinding.btnCopyAgentId.setOnClickListener {
+            copyAgentId(agentId)
+        }
 
         setSosModeButtonsChecked(sheetBinding, state.sosDetectionMode)
         setEosModeButtonsChecked(sheetBinding, state.eosDetectionMode)

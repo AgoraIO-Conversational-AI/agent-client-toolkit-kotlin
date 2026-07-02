@@ -96,6 +96,7 @@ class AgentChatViewModel : ViewModel() {
         val isMuted: Boolean = false,
         val sosDetectionMode: TurnDetectionMode = TurnDetectionMode.VAD,
         val eosDetectionMode: TurnDetectionMode = TurnDetectionMode.SEMANTIC,
+        val agentId: String? = null,
         // Connection state
         val connectionState: ConnectionState = ConnectionState.Idle
     ) {
@@ -625,6 +626,7 @@ class AgentChatViewModel : ViewModel() {
                     this@AgentChatViewModel.agentId = agentId
                     isStartingAgent = false
                     _uiState.value = _uiState.value.copy(
+                        agentId = agentId,
                         connectionState = ConnectionState.Connected
                     )
                     addStatusLog("Agent start successfully")
@@ -685,6 +687,7 @@ class AgentChatViewModel : ViewModel() {
             rtmLoggedIn = false
 
             _uiState.value = _uiState.value.copy(
+                agentId = null,
                 connectionState = ConnectionState.Connecting
             )
 
@@ -772,6 +775,8 @@ class AgentChatViewModel : ViewModel() {
         isStartingAgent = false
         authToken = null
         unifiedToken = null
+        agentId = null
+        _uiState.value = _uiState.value.copy(agentId = null)
     }
 
     /**
@@ -1033,6 +1038,7 @@ class AgentChatViewModel : ViewModel() {
                 rtcJoined = false
                 authToken = null
                 _uiState.value = _uiState.value.copy(
+                    agentId = null,
                     connectionState = ConnectionState.Idle
                 )
                 _transcriptList.value = emptyList()

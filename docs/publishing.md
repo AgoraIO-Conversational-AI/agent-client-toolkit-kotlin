@@ -39,6 +39,16 @@ Version guidance:
 - Backward-compatible feature: `2.9.0` -> `2.10.0`
 - Breaking API change: `2.9.0` -> `3.0.0`
 
+## SemVer and Changelog Gate
+
+Every release must update `CHANGELOG.md`.
+
+- Patch releases are for compatible fixes, parser hardening, documentation corrections, and packaging metadata fixes.
+- Minor releases may add optional APIs, optional event fields, new callbacks with default no-op behavior, or new supported protocol events.
+- Major releases are required for source or binary incompatible public API changes, changed defaults, changed callback timing, changed package identity, or higher minimum platform baselines that exclude existing consumers.
+
+Release candidates must include changelog entries. Do not promote an RC to final until package validation and sample or clean-app validation pass.
+
 ## Package the Rehoboam Maven Input Zip
 
 Run:
@@ -86,21 +96,23 @@ unzip -p conversational-ai/build/distributions/agora-agent-client-toolkit-<versi
 
 ## Pre-Publish Checklist
 
-1. The release version is a non-SNAPSHOT version, for example `2.9.0-rc.1` or `2.9.0`.
-2. Before publishing the final version, a release candidate has passed sample / clean-app validation.
-3. Unit tests pass:
+1. `CHANGELOG.md` has a release entry for the version being packaged. The first public release must establish the compatibility baseline.
+2. Public API changes in `conversational-ai/src/main/java/io/agora/conversational/api/IConversationalAIAPI.kt` have been reviewed for SemVer impact.
+3. Public README files are aligned with the API surface and do not include internal publishing URLs or platform-specific release instructions.
+4. The release version is a non-SNAPSHOT version, for example `2.9.0-rc.1` or `2.9.0`.
+5. Before publishing the final version, a release candidate has passed sample / clean-app validation.
+6. Unit tests pass:
 
    ```bash
    ./gradlew :app:testDebugUnitTest :conversational-ai:testDebugUnitTest
    ```
 
-4. The package script succeeds:
+7. The package script succeeds:
 
    ```bash
    VERSION=2.9.0-rc.1 scripts/build_rehoboam_maven_input_zip.sh
    ```
 
-5. The packaged POM includes `url` and `scm`.
-6. The zip includes `.pom`, `.aar`, `-sources.jar`, and `-javadoc.jar`.
-7. `git status --short` has no missing release files, untracked resources needed by layouts, or stale staged files.
-8. Public README files do not include internal publishing URLs or platform-specific release instructions.
+8. The packaged POM includes `url` and `scm`.
+9. The zip includes `.pom`, `.aar`, `-sources.jar`, and `-javadoc.jar`.
+10. `git status --short` has no missing release files, untracked resources needed by layouts, or stale staged files.
