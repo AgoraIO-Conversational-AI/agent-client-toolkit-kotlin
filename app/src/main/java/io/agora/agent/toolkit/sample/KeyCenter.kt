@@ -6,7 +6,6 @@ object KeyCenter {
     // Agora App Credentials
     val APP_ID: String = BuildConfig.APP_ID
     val APP_CERTIFICATE: String = BuildConfig.APP_CERTIFICATE
-    val TOOLBOX_SERVER_HOST: String = BuildConfig.TOOLBOX_SERVER_HOST
 
     val ASR_VENDOR: String = BuildConfig.ASR_VENDOR
     val ASR_API_KEY: String = BuildConfig.ASR_API_KEY

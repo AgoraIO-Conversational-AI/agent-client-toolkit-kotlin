@@ -9,6 +9,17 @@ import org.junit.Test
 
 class AgentStarterTest {
     @Test
+    fun apiBaseUrl_usesProductionConversationalAiEndpoint() {
+        val field = AgentStarter::class.java.getDeclaredField("API_BASE_URL")
+        field.isAccessible = true
+
+        assertEquals(
+            "https://api.agora.io/api/conversational-ai-agent/v2/projects",
+            field.get(AgentStarter)
+        )
+    }
+
+    @Test
     fun buildJsonPayload_usesExplicitAsrLlmTtsConfiguration() {
         val payload = buildPayload()
 

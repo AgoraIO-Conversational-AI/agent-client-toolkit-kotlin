@@ -1,65 +1,14 @@
 package io.agora.agent.toolkit.sample.api
 
-import okhttp3.Request
+import io.agora.dynamickey.media.AccessToken2
 import io.agora.agent.toolkit.sample.KeyCenter
-import org.json.JSONArray
-import org.json.JSONObject
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertNull
+import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import java.lang.reflect.InvocationTargetException
 
 class TokenGeneratorTest {
-    @Test
-    fun buildHttpRequest_usesConvoAiToolboxTokenEndpointWithoutAuthorizationHeader() {
-        val method = TokenGenerator::class.java.getDeclaredMethod(
-            "buildHttpRequest",
-            JSONObject::class.java
-        )
-        method.isAccessible = true
-
-        val request = method.invoke(
-            TokenGenerator,
-            JSONObject().put("uid", "123456")
-        ) as Request
-
-        assertEquals(
-            "${KeyCenter.TOOLBOX_SERVER_HOST.trimEnd('/')}/v2/token/generate",
-            request.url.toString()
-        )
-        assertNull(request.header("Authorization"))
-    }
-
-    @Test
-    fun buildJsonRequest_usesConvoAiTokenPayloadShape() {
-        val method = TokenGenerator::class.java.getDeclaredMethod(
-            "buildJsonRequest",
-            String::class.java,
-            String::class.java,
-            Array<AgoraTokenType>::class.java
-        )
-        method.isAccessible = true
-
-        val payload = method.invoke(
-            TokenGenerator,
-            "",
-            "123456",
-            arrayOf(AgoraTokenType.Rtc, AgoraTokenType.Rtm)
-        ) as JSONObject
-
-        assertEquals("", payload.getString("channelName"))
-        assertEquals("123456", payload.getString("uid"))
-        assertEquals("Android", payload.getString("src"))
-        assertEquals(24 * 60 * 60, payload.getInt("expire"))
-
-        val types = payload.get("types") as JSONArray
-        assertEquals(2, types.length())
-        assertEquals(1, types.getInt(0))
-        assertEquals(2, types.getInt(1))
-        assertTrue(payload.has("appId"))
-        assertEquals(KeyCenter.APP_CERTIFICATE.isNotEmpty(), payload.has("appCertificate"))
-    }
-
     @Test
     fun appCertificateDoesNotComeFromExamplePlaceholder() {
         assertEquals(
@@ -69,11 +18,108 @@ class TokenGeneratorTest {
     }
 
     @Test
-    fun toolboxHostIsExposedThroughBuildConfig() {
+    fun buildConfigExposesOnlyAppCredentialsForTokenGeneration() {
         val fieldNames = Class.forName("io.agora.agent.toolkit.BuildConfig")
             .declaredFields
             .map { it.name }
 
-        assertTrue(fieldNames.contains("TOOLBOX_SERVER_HOST"))
+        val tokenConfigFields = fieldNames
+            .filter { it == "APP_ID" || it == "APP_CERTIFICATE" || it.contains("HOST") }
+            .sorted()
+
+        assertEquals(listOf("APP_CERTIFICATE", "APP_ID"), tokenConfigFields)
     }
+
+    @Test
+    fun generateLocalConvoAiToken_buildsRtcAndRtmAccessToken2() {
+        val method = TokenGenerator::class.java.getDeclaredMethod(
+            "generateLocalConvoAiToken",
+            String::class.java,
+            String::class.java,
+            String::class.java,
+            String::class.java
+        )
+        method.isAccessible = true
+
+        val token = method.invoke(
+            TokenGenerator,
+            "0".repeat(32),
+            "1".repeat(32),
+            "channel_kotlin_123456",
+            "123456"
+        ) as String
+
+        assertTrue(token.startsWith("007"))
+        assertTrue(token.length > 80)
+    }
+
+    @Test
+    fun generateLocalConvoAiToken_canBeParsedByJavaAccessToken2() {
+        val method = TokenGenerator::class.java.getDeclaredMethod(
+            "generateLocalConvoAiToken",
+            String::class.java,
+            String::class.java,
+            String::class.java,
+            String::class.java
+        )
+        method.isAccessible = true
+
+        val token = method.invoke(
+            TokenGenerator,
+            "0".repeat(32),
+            "1".repeat(32),
+            "channel_kotlin_123456",
+            "123456"
+        ) as String
+
+        val accessToken = AccessToken2()
+        assertTrue(accessToken.parse(token))
+    }
+
+    @Test
+    fun generateLocalConvoAiToken_rejectsBlankAppCertificate() {
+        val method = TokenGenerator::class.java.getDeclaredMethod(
+            "generateLocalConvoAiToken",
+            String::class.java,
+            String::class.java,
+            String::class.java,
+            String::class.java
+        )
+        method.isAccessible = true
+
+        val error = assertThrows(InvocationTargetException::class.java) {
+            method.invoke(
+                TokenGenerator,
+                "0".repeat(32),
+                "",
+                "channel_kotlin_123456",
+                "123456"
+            )
+        }
+        assertTrue(error.cause is IllegalArgumentException)
+    }
+
+    @Test
+    fun generateLocalConvoAiToken_rejectsBlankUid() {
+        val method = TokenGenerator::class.java.getDeclaredMethod(
+            "generateLocalConvoAiToken",
+            String::class.java,
+            String::class.java,
+            String::class.java,
+            String::class.java
+        )
+        method.isAccessible = true
+
+        val error = assertThrows(InvocationTargetException::class.java) {
+            method.invoke(
+                TokenGenerator,
+                "0".repeat(32),
+                "1".repeat(32),
+                "channel_kotlin_123456",
+                ""
+            )
+        }
+        assertTrue(error.cause is IllegalArgumentException)
+    }
+
 }

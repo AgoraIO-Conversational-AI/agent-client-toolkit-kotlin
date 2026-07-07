@@ -28,7 +28,7 @@ Current constraint:
 - Manual SOS/EOS capability is decided before `POST /join`. The demo stores independent SOS / EOS detection settings in `AgentChatViewModel` state and passes them into `AgentStarter.startAgentAsync(...)`.
 - Demo ASR / LLM / TTS values come from `env.example.properties` defaults plus local `env.properties` overrides through `BuildConfig` / `KeyCenter`
 - Provider keys in the demo payload are placeholders; production should move this config to a backend
-- `env.properties` carries required local `APP_ID`, optional `APP_CERTIFICATE`, optional `TOOLBOX_SERVER_HOST`, and demo ASR / LLM / TTS overrides
+- `env.properties` carries required local `APP_ID` / `APP_CERTIFICATE`, and demo ASR / LLM / TTS overrides
 
 If the upstream REST API changes the client-side ASR / LLM / TTS request shape, update all of these together:
 
@@ -95,12 +95,11 @@ For runtime structure, see `ARCHITECTURE.md`. For entry files, see `README.md`.
 
 ### TokenGenerator (Demo Only)
 
-- Generates RTC/RTM tokens via the ConvoAI toolbox endpoint configured by `TOOLBOX_SERVER_HOST`
-- Sends `appId`, `appCertificate`, `channelName`, `uid`, `types` (1=RTC, 2=RTM) in POST body
-- Does not send an extra token-generation auth header
-- Returns a unified token usable for both RTC and RTM
-- Sends `appCertificate` only when `APP_CERTIFICATE` is configured
-- Demo only — production must use your own backend for token generation
+- Generates unified RTC + RTM AccessToken2 locally from `APP_CERTIFICATE`
+- Returns a unified token usable for RTC join, RTM login, and ConvoAI REST auth
+- Demo only — production must use your own backend for token generation and must not ship `APP_CERTIFICATE` in the app
+- The demo implementation is in `app/src/main/java/io/agora/agent/toolkit/sample/api/TokenGenerator.kt`
+  and uses the local Java `RtcTokenBuilder2` (`app/src/main/java/io/agora/dynamickey/media`) instead of a remote toolbox service.
 
 ### ConversationalAIAPI
 
@@ -136,8 +135,7 @@ Gradle validates all required properties at build time. If any are missing or em
 | Field | Description | Required | Default |
 |-------|-------------|----------|-------|
 | `APP_ID` | Agora App ID | ✅ | — |
-| `APP_CERTIFICATE` | Agora App Certificate. Optional for the current test toolbox flow; required if your token service needs it. | ❌ | — |
-| `TOOLBOX_SERVER_HOST` | Demo toolbox token service host | ❌ | empty |
+| `APP_CERTIFICATE` | Agora App Certificate. Required only for the local demo token generator; production apps must keep this on a backend. | ✅ | — |
 | `ASR_VENDOR` | ASR provider name | ❌ | `soniox` |
 | `ASR_API_KEY` | ASR provider key | ❌ | `xxx` |
 | `ASR_MODEL` | ASR model | ❌ | `stt-rt-preview-v2` |
@@ -152,12 +150,12 @@ Gradle validates all required properties at build time. If any are missing or em
 
 ### APP_CERTIFICATE
 
-This project uses HTTP token auth (`Authorization: agora token=<token>`) for REST API calls. The demo `TokenGenerator` sends `appCertificate` only when `APP_CERTIFICATE` is configured.
+This project uses HTTP token auth (`Authorization: agora token=<token>`) for REST API calls. The demo `TokenGenerator` generates a unified RTC + RTM AccessToken2 locally from `APP_CERTIFICATE`.
 
 ### Build-Time Validation
 
 `build.gradle.kts` validates the following properties are non-empty at build time:
-`APP_ID`
+`APP_ID`, `APP_CERTIFICATE`
 
 If any are missing, the build fails with a message listing the missing properties.
 
@@ -167,14 +165,14 @@ Client directly calls Agora REST API (Demo mode):
 
 | Endpoint | Method | Auth Header | Description |
 |----------|--------|-------------|-------------|
-| `api-test.agora.io/api/conversational-ai-agent/v2/projects/{appId}/join` | POST | `Authorization: agora token=<authToken>` | Start Agent |
-| `api-test.agora.io/api/conversational-ai-agent/v2/projects/{appId}/agents/{agentId}/leave` | POST | `Authorization: agora token=<authToken>` | Stop Agent |
+| `api.agora.io/api/conversational-ai-agent/v2/projects/{appId}/join` | POST | `Authorization: agora token=<authToken>` | Start Agent |
+| `api.agora.io/api/conversational-ai-agent/v2/projects/{appId}/agents/{agentId}/leave` | POST | `Authorization: agora token=<authToken>` | Stop Agent |
 
-Token generated via Demo service (must be replaced with your own backend in production):
+Token generation in Demo mode (must be replaced with your own backend in production):
 
 | Endpoint | Method | Description |
 |----------|--------|-------------|
-| `TOOLBOX_SERVER_HOST` + `/v2/token/generate` | POST | Generate RTC/RTM Token (requires appId; sends appCertificate when configured) |
+| Local AccessToken2 builder | — | Uses `APP_CERTIFICATE` to create a unified RTC + RTM token |
 
 ### Start Agent Request Body Structure
 
@@ -260,7 +258,7 @@ User Action → ViewModel → Agora SDK (RTC/RTM)
 ## Event Flow
 
 1. User taps Start Agent → check microphone permission
-2. Generate userToken (unified for RTC+RTM, channelName is empty string, uid=userId)
+2. Generate userToken (unified for RTC+RTM, channelName is current session channel, uid=userId)
 3. Parallel: join RTC channel + login RTM (both use the same userToken)
 4. Both ready → subscribeMessage(channelName) → generate agentToken + authToken (uid=agentUid, channelName=current channel)
 5. Call `AgentStarter.startAgentAsync(channelName, agentRtcUid, agentToken, authToken, remoteRtcUid, sosDetectionMode, eosDetectionMode)` to start Agent, where `remoteRtcUid` is the current user RTC UID
@@ -287,10 +285,10 @@ request JSON structure, edit `buildJsonPayload()` in `AgentStarter.kt`.
 
 ## Key Constraints
 
-1. **APP_CERTIFICATE may be required by your auth/token flow**: This project uses HTTP token auth for REST API. The demo `TokenGenerator` sends `appCertificate` only when `APP_CERTIFICATE` is configured.
+1. **APP_CERTIFICATE is required by the local demo token flow**: This project uses HTTP token auth for REST API. The demo `TokenGenerator` uses `APP_CERTIFICATE` for local AccessToken2 generation.
 2. **Demo Mode**: Config injected via `env.example.properties` + `env.properties` → BuildConfig, client directly calls REST API
 3. **Production**: Sensitive info (`appCertificate`) must be on backend; client only fetches Token and starts Agent through backend
-4. **Token Generation**: `TokenGenerator.kt` is Demo-only; production must use your own server
+4. **Token Generation**: `TokenGenerator.kt` is Demo-only; production must use your own server and must not embed `APP_CERTIFICATE`
 5. **Resource Cleanup**: RTC/RTM resources fully released in `hangup()` and `onCleared()`; ConversationalAIAPI released via `destroy()`
 6. **Permissions**: Requires `RECORD_AUDIO` and `INTERNET` permissions
 7. **ConversationalAIAPI module boundary**: Files under `:conversational-ai` (`conversational-ai/src/main/java/io/agora/conversational/api/`) are reusable toolkit components packaged for Maven / AAR release. Keep the public API minimal and update `conversational-ai/README.md` when the API changes. The sample app depends on it via `implementation(project(":conversational-ai"))`.

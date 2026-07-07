@@ -28,10 +28,11 @@ if (envPropertiesFile.exists()) {
 }
 
 // Validate required Agora configuration properties.
-// The token toolbox host and demo ASR / LLM / TTS values are configurable
-// through env.properties so the demo can validate different startup payloads.
+// Demo ASR / LLM / TTS values are configurable through env.properties so the
+// demo can validate different startup payloads.
 val requiredProperties = listOf(
-    "APP_ID"
+    "APP_ID",
+    "APP_CERTIFICATE"
 )
 
 val missingProperties = mutableListOf<String>()
@@ -93,7 +94,6 @@ android {
         // Credentials must come from local env.properties, not example placeholders.
         buildConfigString("APP_ID", localEnvProperties.getProperty("APP_ID").orEmpty())
         buildConfigString("APP_CERTIFICATE", localEnvProperties.getProperty("APP_CERTIFICATE").orEmpty())
-        buildConfigStringFromEnv("TOOLBOX_SERVER_HOST")
         buildConfigStringFromEnv("ASR_VENDOR")
         buildConfigStringFromEnv("ASR_API_KEY")
         buildConfigStringFromEnv("ASR_MODEL")

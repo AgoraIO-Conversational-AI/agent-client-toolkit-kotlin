@@ -21,7 +21,7 @@ import org.json.JSONObject
 object AgentStarter {
     private const val JSON_MEDIA_TYPE = "application/json; charset=utf-8"
     private const val API_BASE_URL =
-        "https://api-test.agora.io/api/conversational-ai-agent/v2/projects"
+        "https://api.agora.io/api/conversational-ai-agent/v2/projects"
     private const val DEFAULT_LLM_GREETING_MESSAGE =
         "hello man, I am an AI robot, I can do anything for you"
     private const val DEFAULT_LLM_FAILURE_MESSAGE =

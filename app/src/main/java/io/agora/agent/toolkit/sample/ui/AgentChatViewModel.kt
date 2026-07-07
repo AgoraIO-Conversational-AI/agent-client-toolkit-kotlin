@@ -650,7 +650,7 @@ class AgentChatViewModel : ViewModel() {
     private suspend fun generateUserToken(): String? {
         // Get unified token for both RTC and RTM
         val tokenResult = TokenGenerator.generateTokensAsync(
-            channelName = "",
+            channelName = channelName,
             uid = userId.toString(),
         )
 

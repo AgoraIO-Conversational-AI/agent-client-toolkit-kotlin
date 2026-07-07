@@ -153,7 +153,9 @@ debugLogList   → log panel content
 
 ## Token Flow
 
-The quickstart generates three token roles through the ConvoAI toolbox token service:
+The quickstart generates three token roles through `TokenGenerator`. In demo
+mode, `TokenGenerator` uses local AccessToken2 generation from
+`APP_CERTIFICATE` in `app/src/main/java/io/agora/dynamickey/media/RtcTokenBuilder2.java`:
 
 | Token | Purpose | Usage |
 |-------|---------|-------|
@@ -163,11 +165,10 @@ The quickstart generates three token roles through the ConvoAI toolbox token ser
 
 Notes:
 
-- `userToken` uses `channelName=""` in the current demo flow
+- all three tokens are unified RTC + RTM tokens
+- `userToken` uses the current `channelName` so RTC join and RTM login are bound to the session channel
 - `agentToken` and `authToken` are generated after RTC / RTM are both ready
-- token requests go to `TOOLBOX_SERVER_HOST` + `/v2/token/generate`
-- token requests do not include an extra token-generation auth header
-- Production should replace the demo token service with a backend
+- Production should replace demo-side token generation with a backend and must not embed `APP_CERTIFICATE`
 
 ## Agent Lifecycle
 
@@ -196,12 +197,12 @@ env.example.properties + env.properties
 Build-time required fields:
 
 - `APP_ID`
+- `APP_CERTIFICATE`
 
-The demo toolbox host is injected through `BuildConfig.TOOLBOX_SERVER_HOST`.
-The explicit ASR / LLM / TTS startup values are also injected from
-the merged properties through `BuildConfig` and `KeyCenter`. Local
-`env.properties` overrides `env.example.properties`; `APP_ID` and
-`APP_CERTIFICATE` are read only from local `env.properties`.
+The explicit ASR / LLM / TTS startup values are injected from the merged
+properties through `BuildConfig` and `KeyCenter`. Local `env.properties`
+overrides `env.example.properties`; `APP_ID` and `APP_CERTIFICATE` are read
+only from local `env.properties`.
 
 Current default request:
 
