@@ -28,7 +28,7 @@ if (envPropertiesFile.exists()) {
 }
 
 // Validate required Agora configuration properties.
-// Demo ASR / LLM / TTS values are configurable through env.properties so the
+// Demo LLM / TTS values are configurable through env.properties so the
 // demo can validate different startup payloads.
 val requiredProperties = listOf(
     "APP_ID",
@@ -94,9 +94,6 @@ android {
         // Credentials must come from local env.properties, not example placeholders.
         buildConfigString("APP_ID", localEnvProperties.getProperty("APP_ID").orEmpty())
         buildConfigString("APP_CERTIFICATE", localEnvProperties.getProperty("APP_CERTIFICATE").orEmpty())
-        buildConfigStringFromEnv("ASR_VENDOR")
-        buildConfigStringFromEnv("ASR_API_KEY")
-        buildConfigStringFromEnv("ASR_MODEL")
         buildConfigStringFromEnv("LLM_URL")
         buildConfigStringFromEnv("LLM_API_KEY")
         buildConfigStringFromEnv("LLM_MODEL")

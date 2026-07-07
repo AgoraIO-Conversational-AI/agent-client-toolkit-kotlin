@@ -7,10 +7,6 @@ object KeyCenter {
     val APP_ID: String = BuildConfig.APP_ID
     val APP_CERTIFICATE: String = BuildConfig.APP_CERTIFICATE
 
-    val ASR_VENDOR: String = BuildConfig.ASR_VENDOR
-    val ASR_API_KEY: String = BuildConfig.ASR_API_KEY
-    val ASR_MODEL: String = BuildConfig.ASR_MODEL
-
     val LLM_URL: String = BuildConfig.LLM_URL
     val LLM_API_KEY: String = BuildConfig.LLM_API_KEY
     val LLM_MODEL: String = BuildConfig.LLM_MODEL

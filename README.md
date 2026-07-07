@@ -41,7 +41,7 @@ val conversationalAIAPI = ConversationalAIAPIImpl(
 )
 ```
 
-Register event callbacks:
+Register your event handler. A typical handler starts with callbacks like:
 
 ```kotlin
 conversationalAIAPI.addHandler(object : IConversationalAIAPIEventHandler {
@@ -49,65 +49,15 @@ conversationalAIAPI.addHandler(object : IConversationalAIAPIEventHandler {
         // Render agent state.
     }
 
-    override fun onAgentListeningChanged(agentUserId: String, isListening: Boolean) {
-        // Handle listening state.
-    }
-
-    override fun onAgentThinkingChanged(agentUserId: String, isThinking: Boolean) {
-        // Handle thinking state.
-    }
-
-    override fun onAgentSpeakingChanged(agentUserId: String, isSpeaking: Boolean) {
-        // Handle speaking state.
-    }
-
-    override fun onAgentInterrupted(agentUserId: String, event: InterruptEvent) {
-        // Handle interruption.
-    }
-
-    override fun onAgentMetrics(agentUserId: String, metric: Metric) {
-        // Observe module latency metrics.
-    }
-
-    override fun onTurnFinished(agentUserId: String, turn: Turn) {
-        // Observe completed-turn latency.
+    override fun onTranscriptUpdated(agentUserId: String, transcript: Transcript) {
+        // Render user or agent transcript.
     }
 
     override fun onAgentError(agentUserId: String, error: ModuleError) {
         // Handle agent-side errors.
     }
 
-    override fun onMessageError(agentUserId: String, error: MessageError) {
-        // Handle message errors.
-    }
-
-    override fun onMessageReceiptUpdated(agentUserId: String, receipt: MessageReceipt) {
-        // Handle message receipts.
-    }
-
-    override fun onAgentVoiceprintStateChanged(agentUserId: String, event: VoiceprintStateChangeEvent) {
-        // Handle voiceprint state changes.
-    }
-
-    override fun onUserManualSosEvent(agentUserId: String, event: UserManualSosEvent) {
-        // Handle manual SOS result.
-    }
-
-    override fun onUserManualEosEvent(agentUserId: String, event: UserManualEosEvent) {
-        // Handle manual EOS result.
-    }
-
-    override fun onAgentManualEosEvent(agentUserId: String, event: AgentManualEosEvent) {
-        // Handle automatic EOS in manual mode.
-    }
-
-    override fun onTranscriptUpdated(agentUserId: String, transcript: Transcript) {
-        // Render user or agent transcript.
-    }
-
-    override fun onDebugLog(log: String) {
-        // Forward debug logs if needed.
-    }
+    // Implement the remaining required callbacks for your app.
 })
 ```
 
@@ -127,7 +77,8 @@ conversationalAIAPI.subscribeMessage(channelName) { error ->
 }
 ```
 
-See [conversational-ai/README.md](./conversational-ai/README.md) for the full component API guide.
+See [conversational-ai/README.md](./conversational-ai/README.md) for the
+complete event handler interface and component API guide.
 
 ## Manual SOS/EOS
 

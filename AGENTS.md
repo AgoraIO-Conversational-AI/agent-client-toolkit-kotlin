@@ -13,10 +13,11 @@ The RESTful startup payload is built in `app/src/main/java/io/agora/agent/toolki
 
 Current client-side request shape:
 
-- explicit `properties.asr`, `properties.llm`, and `properties.tts` blocks
+- server default ASR; no explicit `properties.asr` block
+- explicit `properties.llm` and `properties.tts` blocks
 - common fields: `channel`, `token`, `agent_rtc_uid`, `remote_rtc_uids`, `idle_timeout`
 - transport fields: `advanced_features.enable_rtm`, `parameters.data_channel`
-- event/debug fields: `parameters.enable_metrics`, `parameters.enable_error_message`, `parameters.transcript`
+- event/debug fields: `parameters.enable_metrics`, `parameters.enable_error_message`
 - turn detection selected before startup:
   - `SOS` controls `start_of_speech.mode`
   - `EOS` controls `end_of_speech.mode`
@@ -24,13 +25,13 @@ Current client-side request shape:
 
 Current constraint:
 
-- RESTful startup uses explicit ASR / LLM / TTS blocks in `AgentStarter.buildJsonPayload()`
+- RESTful startup uses server default ASR and explicit LLM / TTS blocks in `AgentStarter.buildJsonPayload()`
 - Manual SOS/EOS capability is decided before `POST /join`. The demo stores independent SOS / EOS detection settings in `AgentChatViewModel` state and passes them into `AgentStarter.startAgentAsync(...)`.
-- Demo ASR / LLM / TTS values come from `env.example.properties` defaults plus local `env.properties` overrides through `BuildConfig` / `KeyCenter`
+- Demo LLM / TTS values come from `env.example.properties` defaults plus local `env.properties` overrides through `BuildConfig` / `KeyCenter`
 - Provider keys in the demo payload are placeholders; production should move this config to a backend
-- `env.properties` carries required local `APP_ID` / `APP_CERTIFICATE`, and demo ASR / LLM / TTS overrides
+- `env.properties` carries required local `APP_ID` / `APP_CERTIFICATE`, and demo LLM / TTS overrides
 
-If the upstream REST API changes the client-side ASR / LLM / TTS request shape, update all of these together:
+If the upstream REST API changes the client-side startup request shape, update all of these together:
 
 1. `AgentStarter.buildJsonPayload()`
 2. `env.example.properties`
@@ -85,10 +86,10 @@ For runtime structure, see `ARCHITECTURE.md`. For entry files, see `README.md`.
 ### AgentStarter
 
 - `startAgentAsync()`: POST `/join`
-  - Explicit ASR / LLM / TTS blocks
+  - Server default ASR; explicit LLM / TTS blocks
   - `sosDetectionMode`: controls `start_of_speech.mode`
   - `eosDetectionMode`: controls `end_of_speech.mode`
-  - Advanced features: `enable_rtm: true`, `enable_bhvs: true`, `enable_string_uid: false`, `idle_timeout: 120`
+  - Advanced features: `enable_rtm: true`, `enable_string_uid: false`, `idle_timeout: 120`
   - Remote UIDs: `remote_rtc_uids: ["<currentUserUid>"]`
 - `stopAgentAsync()`: POST `/agents/{agentId}/leave`
 - Authentication: `Authorization: agora token=<authToken>`
@@ -136,9 +137,6 @@ Gradle validates all required properties at build time. If any are missing or em
 |-------|-------------|----------|-------|
 | `APP_ID` | Agora App ID | ✅ | — |
 | `APP_CERTIFICATE` | Agora App Certificate. Required only for the local demo token generator; production apps must keep this on a backend. | ✅ | — |
-| `ASR_VENDOR` | ASR provider name | ❌ | `soniox` |
-| `ASR_API_KEY` | ASR provider key | ❌ | `xxx` |
-| `ASR_MODEL` | ASR model | ❌ | `stt-rt-preview-v2` |
 | `LLM_URL` | OpenAI-compatible LLM endpoint | ❌ | `https://api.groq.com/openai/v1/chat/completions` |
 | `LLM_API_KEY` | LLM API key | ❌ | empty |
 | `LLM_MODEL` | LLM model | ❌ | `llama-3.3-70b-versatile` |
@@ -187,14 +185,8 @@ Token generation in Demo mode (must be replaced with your own backend in product
     "enable_string_uid": false,
     "idle_timeout": 120,
     "advanced_features": {
-      "enable_aivad": false,
-      "enable_bhvs": true,
       "enable_sal": false,
       "enable_rtm": true
-    },
-    "asr": {
-      "vendor": "soniox",
-      "params": { "api_key": "xxx", "model": "stt-rt-preview-v2" }
     },
     "tts": {
       "vendor": "elevenlabs",
@@ -210,22 +202,16 @@ Token generation in Demo mode (must be replaced with your own backend in product
     "parameters": {
       "enable_metrics": true,
       "enable_error_message": true,
-      "output_audio_codec": "OPUSFB",
-      "audio_scenario": "default",
-      "transcript": { "enable": true, "protocol_version": "v2", "enable_words": false },
       "data_channel": "rtm"
     },
     "turn_detection": {
       "mode": "default",
       "config": {
-        "speech_threshold": 0.6,
         "start_of_speech": {
-          "mode": "vad",
-          "vad_config": { "interrupt_duration_ms": 500, "speaking_interrupt_duration_ms": 300, "prefix_padding_ms": 800 }
+          "mode": "vad"
         },
         "end_of_speech": {
-          "mode": "semantic",
-          "semantic_config": { "silence_duration_ms": 480, "max_wait_ms": 1200, "pause_state_enabled": false }
+          "mode": "semantic"
         }
       }
     }
@@ -242,8 +228,8 @@ Token generation in Demo mode (must be replaced with your own backend in product
 
 When either setting is `manual`, the demo shows the corresponding manual
 capability button after startup. The request still uses the same
-`turn_detection` block; only the selected `mode` and mode-specific config under
-`start_of_speech` / `end_of_speech` changes.
+`turn_detection` block; only the selected `mode` under `start_of_speech` /
+`end_of_speech` changes.
 
 ## Data Flow
 
@@ -273,15 +259,15 @@ The agent start request body is built in `AgentStarter.kt` → `buildJsonPayload
 
 | Section | What it controls | Where in the JSON |
 |---------|-----------------|-------------------|
-| `asr` | Speech-to-text provider and model | `properties.asr` |
 | `llm` | LLM endpoint and model | `properties.llm` |
 | `tts` | Text-to-speech provider and voice | `properties.tts` |
-| `parameters` | Data channel (`rtm`), metrics/errors, transcript output | `properties.parameters` |
+| `parameters` | Data channel (`rtm`), metrics/errors | `properties.parameters` |
 | `advanced_features` | RTM enable flag | `properties.advanced_features` |
 | Top-level | Channel name, agent UID, idle timeout, token | `properties.*` |
 
-To change demo ASR / LLM / TTS values, edit `env.properties`. To change the
-request JSON structure, edit `buildJsonPayload()` in `AgentStarter.kt`.
+To change demo LLM / TTS values, edit `env.properties`. ASR uses the server
+default in the current sample. To change the request JSON structure, edit
+`buildJsonPayload()` in `AgentStarter.kt`.
 
 ## Key Constraints
 

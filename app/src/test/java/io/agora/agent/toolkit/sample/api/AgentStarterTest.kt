@@ -4,7 +4,6 @@ import io.agora.agent.toolkit.sample.KeyCenter
 import org.json.JSONObject
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
-import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class AgentStarterTest {
@@ -20,23 +19,16 @@ class AgentStarterTest {
     }
 
     @Test
-    fun buildJsonPayload_usesExplicitAsrLlmTtsConfiguration() {
+    fun buildJsonPayload_usesServerDefaultAsrAndExplicitLlmTtsConfiguration() {
         val payload = buildPayload()
 
         assertFalse(payload.has("preset"))
 
         val properties = payload.getJSONObject("properties")
-        val asr = properties.getJSONObject("asr")
         val llm = properties.getJSONObject("llm")
         val tts = properties.getJSONObject("tts")
 
-        assertEquals(KeyCenter.ASR_VENDOR, asr.getString("vendor"))
-        assertFalse(asr.has("language"))
-        assertEquals(KeyCenter.ASR_API_KEY, asr.getJSONObject("params").getString("api_key"))
-        assertEquals(KeyCenter.ASR_MODEL, asr.getJSONObject("params").getString("model"))
-        assertFalse(asr.getJSONObject("params").has("language_hints"))
-        assertFalse(asr.getJSONObject("params").has("key"))
-        assertFalse(asr.getJSONObject("params").has("language"))
+        assertFalse(properties.has("asr"))
         assertEquals(KeyCenter.LLM_URL, llm.getString("url"))
         assertEquals(KeyCenter.LLM_API_KEY, llm.getString("api_key"))
         assertEquals(KeyCenter.LLM_MODEL, llm.getJSONObject("params").getString("model"))
@@ -72,20 +64,9 @@ class AgentStarterTest {
         val parameters = properties.getJSONObject("parameters")
 
         assertEquals("default", turnDetection.getString("mode"))
-        assertEquals(0.6, config.getDouble("speech_threshold"), 0.0)
-        assertEquals("vad", startOfSpeech.getString("mode"))
-        assertEquals("semantic", endOfSpeech.getString("mode"))
-        assertFalse(startOfSpeech.has("model"))
-        assertFalse(endOfSpeech.has("model"))
-        assertEquals(500, startOfSpeech.getJSONObject("vad_config").getInt("interrupt_duration_ms"))
-        assertEquals(300, startOfSpeech.getJSONObject("vad_config").getInt("speaking_interrupt_duration_ms"))
-        assertEquals(800, startOfSpeech.getJSONObject("vad_config").getInt("prefix_padding_ms"))
-        assertFalse(startOfSpeech.has("semantic_config"))
-        assertFalse(startOfSpeech.getJSONObject("vad_config").has("ignored_words"))
-        assertEquals(480, endOfSpeech.getJSONObject("semantic_config").getInt("silence_duration_ms"))
-        assertEquals(1200, endOfSpeech.getJSONObject("semantic_config").getInt("max_wait_ms"))
-        assertFalse(endOfSpeech.getJSONObject("semantic_config").getBoolean("pause_state_enabled"))
-        assertFalse(endOfSpeech.has("vad_config"))
+        assertFalse(config.has("speech_threshold"))
+        assertTurnModeOnly(startOfSpeech, "vad")
+        assertTurnModeOnly(endOfSpeech, "semantic")
         assertFalse(parameters.has("sos_eos"))
         assertFalse(parameters.has("silence_config"))
         assertFalse(parameters.has("farewell_config"))
@@ -103,18 +84,9 @@ class AgentStarterTest {
         val parameters = properties.getJSONObject("parameters")
 
         assertEquals("default", turnDetection.getString("mode"))
-        assertEquals(0.6, config.getDouble("speech_threshold"), 0.0)
-        assertEquals("vad", startOfSpeech.getString("mode"))
-        assertEquals("manual", endOfSpeech.getString("mode"))
-        assertFalse(startOfSpeech.has("model"))
-        assertFalse(endOfSpeech.has("model"))
-        assertEquals(500, startOfSpeech.getJSONObject("vad_config").getInt("interrupt_duration_ms"))
-        assertEquals(300, startOfSpeech.getJSONObject("vad_config").getInt("speaking_interrupt_duration_ms"))
-        assertEquals(800, startOfSpeech.getJSONObject("vad_config").getInt("prefix_padding_ms"))
-        assertFalse(startOfSpeech.has("semantic_config"))
-        assertFalse(startOfSpeech.getJSONObject("vad_config").has("ignored_words"))
-        assertFalse(endOfSpeech.has("vad_config"))
-        assertFalse(endOfSpeech.has("semantic_config"))
+        assertFalse(config.has("speech_threshold"))
+        assertTurnModeOnly(startOfSpeech, "vad")
+        assertTurnModeOnly(endOfSpeech, "manual")
         assertFalse(parameters.has("sos_eos"))
         assertFalse(parameters.has("silence_config"))
         assertFalse(parameters.has("farewell_config"))
@@ -135,19 +107,9 @@ class AgentStarterTest {
         val parameters = properties.getJSONObject("parameters")
 
         assertEquals("default", turnDetection.getString("mode"))
-        assertEquals(0.6, config.getDouble("speech_threshold"), 0.0)
-        assertEquals("manual", startOfSpeech.getString("mode"))
-        assertEquals("semantic", endOfSpeech.getString("mode"))
-        assertFalse(startOfSpeech.has("model"))
-        assertFalse(endOfSpeech.has("model"))
-        assertFalse(startOfSpeech.has("vad_config"))
-        assertFalse(startOfSpeech.has("semantic_config"))
-        assertFalse(startOfSpeech.has("keywords_config"))
-        assertFalse(startOfSpeech.has("disabled_config"))
-        assertFalse(endOfSpeech.has("vad_config"))
-        assertEquals(480, endOfSpeech.getJSONObject("semantic_config").getInt("silence_duration_ms"))
-        assertEquals(1200, endOfSpeech.getJSONObject("semantic_config").getInt("max_wait_ms"))
-        assertFalse(endOfSpeech.getJSONObject("semantic_config").getBoolean("pause_state_enabled"))
+        assertFalse(config.has("speech_threshold"))
+        assertTurnModeOnly(startOfSpeech, "manual")
+        assertTurnModeOnly(endOfSpeech, "semantic")
         assertFalse(parameters.has("sos_eos"))
         assertFalse(parameters.has("silence_config"))
         assertFalse(parameters.has("farewell_config"))
@@ -165,12 +127,16 @@ class AgentStarterTest {
         val startOfSpeech = config.getJSONObject("start_of_speech")
         val endOfSpeech = config.getJSONObject("end_of_speech")
 
-        assertEquals("semantic", startOfSpeech.getString("mode"))
-        assertEquals(200, startOfSpeech.getJSONObject("semantic_config").getInt("interrupt_duration_ms"))
-        assertFalse(startOfSpeech.has("vad_config"))
-        assertEquals("vad", endOfSpeech.getString("mode"))
-        assertEquals(660, endOfSpeech.getJSONObject("vad_config").getInt("silence_duration_ms"))
-        assertFalse(endOfSpeech.has("semantic_config"))
+        assertFalse(config.has("speech_threshold"))
+        assertTurnModeOnly(startOfSpeech, "semantic")
+        assertTurnModeOnly(endOfSpeech, "vad")
+    }
+
+    private fun assertTurnModeOnly(config: JSONObject, mode: String) {
+        assertEquals(mode, config.getString("mode"))
+        assertFalse(config.has("model"))
+        assertFalse(config.has("vad_config"))
+        assertFalse(config.has("semantic_config"))
     }
 
     private fun buildPayload(

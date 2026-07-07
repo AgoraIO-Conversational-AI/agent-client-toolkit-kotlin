@@ -16,7 +16,7 @@ import org.json.JSONObject
  *
  * Starts/stops Conversational AI agents via Agora REST API.
  * Uses HTTP token auth mode: Authorization header is "agora token=<convoai_token>".
- * Pipeline configuration is read from env.properties through KeyCenter.
+ * LLM and TTS configuration is read from env.properties through KeyCenter.
  */
 object AgentStarter {
     private const val JSON_MEDIA_TYPE = "application/json; charset=utf-8"
@@ -121,18 +121,8 @@ object AgentStarter {
 
                 // Advanced features
                 put("advanced_features", JSONObject().apply {
-                    put("enable_aivad", false)
-                    put("enable_bhvs", true)
                     put("enable_sal", false)
                     put("enable_rtm", true)
-                })
-
-                put("asr", JSONObject().apply {
-                    put("vendor", KeyCenter.ASR_VENDOR)
-                    put("params", JSONObject().apply {
-                        put("api_key", KeyCenter.ASR_API_KEY)
-                        put("model", KeyCenter.ASR_MODEL)
-                    })
                 })
 
                 put("tts", JSONObject().apply {
@@ -159,58 +149,17 @@ object AgentStarter {
                 put("parameters", JSONObject().apply {
                     put("enable_metrics", true)
                     put("enable_error_message", true)
-                    put("output_audio_codec", "OPUSFB")
-                    put("audio_scenario", "default")
-                    put("transcript", JSONObject().apply {
-                        put("enable", true)
-                        put("protocol_version", "v2")
-                        put("enable_words", false)
-                    })
                     put("data_channel", "rtm")
                 })
 
                 put("turn_detection", JSONObject().apply {
                     put("mode", "default")
                     put("config", JSONObject().apply {
-                        put("speech_threshold", 0.6)
                         put("start_of_speech", JSONObject().apply {
                             put("mode", sosDetectionMode.value)
-                            when (sosDetectionMode) {
-                                TurnDetectionMode.VAD -> {
-                                    put("vad_config", JSONObject().apply {
-                                        put("interrupt_duration_ms", 500)
-                                        put("speaking_interrupt_duration_ms", 300)
-                                        put("prefix_padding_ms", 800)
-                                    })
-                                }
-                                TurnDetectionMode.SEMANTIC -> {
-                                    put("semantic_config", JSONObject().apply {
-                                        put("interrupt_duration_ms", 200)
-                                        put("prefix_padding_ms", 920)
-                                        put("speaking_interrupt_duration_ms", 350)
-                                        put("ignored_words", JSONArray(listOf("uh-huh", "okay")))
-                                    })
-                                }
-                                TurnDetectionMode.MANUAL -> Unit
-                            }
                         })
                         put("end_of_speech", JSONObject().apply {
                             put("mode", eosDetectionMode.value)
-                            when (eosDetectionMode) {
-                                TurnDetectionMode.VAD -> {
-                                    put("vad_config", JSONObject().apply {
-                                        put("silence_duration_ms", 660)
-                                    })
-                                }
-                                TurnDetectionMode.SEMANTIC -> {
-                                    put("semantic_config", JSONObject().apply {
-                                        put("silence_duration_ms", 480)
-                                        put("max_wait_ms", 1200)
-                                        put("pause_state_enabled", false)
-                                    })
-                                }
-                                TurnDetectionMode.MANUAL -> Unit
-                            }
                         })
                     })
                 })

@@ -70,7 +70,7 @@ Tap Start Agent
   → join RTC + login RTM
   → subscribe RTM channel
   → generate agentToken + authToken
-  → POST /join with explicit ASR / LLM / TTS blocks and selected turn-detection shape
+  → POST /join with server default ASR, explicit LLM / TTS blocks, and selected turn-detection modes
   → save agentId
   → uiState = Connected
 ```
@@ -199,14 +199,14 @@ Build-time required fields:
 - `APP_ID`
 - `APP_CERTIFICATE`
 
-The explicit ASR / LLM / TTS startup values are injected from the merged
-properties through `BuildConfig` and `KeyCenter`. Local `env.properties`
-overrides `env.example.properties`; `APP_ID` and `APP_CERTIFICATE` are read
-only from local `env.properties`.
+The explicit LLM / TTS startup values are injected from the merged properties
+through `BuildConfig` and `KeyCenter`. Local `env.properties` overrides
+`env.example.properties`; `APP_ID` and `APP_CERTIFICATE` are read only from
+local `env.properties`. ASR uses the server default in the current sample.
 
 Current default request:
 
-- ASR: Soniox `stt-rt-preview-v2`
+- ASR: server default; no client-side `properties.asr` override
 - LLM: Groq OpenAI-compatible `llama-3.3-70b-versatile`
 - TTS: ElevenLabs `eleven_flash_v2_5`
 
