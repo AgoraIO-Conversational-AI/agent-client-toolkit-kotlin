@@ -121,6 +121,17 @@ For runtime structure, see `ARCHITECTURE.md`. For entry files, see `README.md`.
 - The public manual turn methods are `manualSOS(agentUserId, completion)` and `manualEOS(agentUserId, completion)`; the toolkit generates `requestId` internally and returns it through the completion callback
 - Audio settings: `loadAudioSettings(AUDIO_SCENARIO_AI_CLIENT)` (must be called before joinChannel)
 
+## Startup Review Guardrails
+
+For AI / PR reviews, use the current demo flow and business rules as the source of truth. Do not propose generic startup refactors unless they fix a concrete violation.
+
+- `loadAudioSettings(AUDIO_SCENARIO_AI_CLIENT)` must run before `joinChannel()`.
+- RTC join and RTM login may run in parallel after the user token is ready.
+- `subscribeMessage(channelName)` is part of the RTM-side setup, but `AgentStarter.startAgentAsync(...)` is gated by RTC joined, RTM logged in, `agentToken` ready, `authToken` ready, and startup-time SOS / EOS modes selected.
+- Connected UI is opened only after `/join` returns a non-empty `agentId`. Agent state, transcript, and agent-side errors must still come from ConversationalAIAPI callbacks, not local fabrication.
+- Stop / hangup owns both the stop request and local cleanup path. Local state, `agentId`, RTC, RTM, and message subscription cleanup must not depend on late RTM events.
+- Keep the demo startup state simple. Do not add extra milestone models, login-state layers, or attempt identifiers beyond the existing flow unless there is a proven business bug.
+
 ## Configuration
 
 ### Configuration Flow

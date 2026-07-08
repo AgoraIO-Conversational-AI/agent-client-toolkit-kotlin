@@ -1053,6 +1053,8 @@ class AgentChatViewModel : ViewModel() {
 
     override fun onCleared() {
         super.onCleared()
+        conversationalAIAPI?.destroy()
+        conversationalAIAPI = null
         leaveRtcChannel()
         logoutRtm()
 

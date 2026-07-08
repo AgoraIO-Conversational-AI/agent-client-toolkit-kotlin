@@ -15,26 +15,6 @@ import java.util.concurrent.TimeUnit
 
 class HttpLogger : Interceptor {
     companion object {
-        private val SENSITIVE_HEADERS = setOf(
-            "auth",
-            "token",
-            "cert",
-            "secret",
-            "appId",
-            "app_id"
-        )
-
-        private val SENSITIVE_PARAMS = setOf(
-            "auth",
-            "token",
-            "password",
-            "cert",
-            "secret",
-            "phone",
-            "appId",
-            "app_id"
-        )
-
         // Excluded API paths
         private val EXCLUDE_PATHS = setOf(
             "/heartbeat",  // Heartbeat API
@@ -60,6 +40,10 @@ class HttpLogger : Interceptor {
     }
 
     override fun intercept(chain: Interceptor.Chain): Response {
+        if (!BuildConfig.DEBUG) {
+            return chain.proceed(chain.request())
+        }
+
         val request = chain.request()
         val url = request.url
         val requestId = UUID.randomUUID().toString().substring(0, 8)
@@ -73,7 +57,7 @@ class HttpLogger : Interceptor {
             val logContent = buildLogContent(request)
             Log.d("[$requestId]-Request", logContent)
         } else if (logResultOnly) {
-            Log.d("[$requestId]-Request", "Large file upload request: ${request.method} ${request.url}")
+            Log.d("[$requestId]-Request", "Large file upload request: ${request.method} ${buildUrlString(request.url)}")
         }
 
         // Execute request
@@ -111,7 +95,7 @@ class HttpLogger : Interceptor {
                 if (index > 0) {
                     logContent.append(";")
                 }
-                val safeValue = if (!BuildConfig.DEBUG && SENSITIVE_HEADERS.any { name.lowercase().contains(it) }) "***" else value
+                val safeValue = redactedHeaderValue(name, value)
                 logContent.append("$name:$safeValue")
             }
             logContent.append("\"")
@@ -125,7 +109,7 @@ class HttpLogger : Interceptor {
             val bodyString = buffer.readString(charset)
             
             // Format JSON body
-            val formattedBody = formatJsonString(bodyString)
+            val formattedBody = formatJsonString(redactedBodyString(bodyString))
             logContent.append(" -d '${formattedBody}'")
         }
 
@@ -158,17 +142,142 @@ class HttpLogger : Interceptor {
             if (url.port != 80 && url.port != 443) {
                 append(":").append(url.port)
             }
-            append(url.encodedPath)
+            append(redactedPath(url.encodedPath))
             
             if (url.queryParameterNames.isNotEmpty()) {
                 append("?")
                 url.queryParameterNames.forEachIndexed { index, name ->
                     if (index > 0) append("&")
-                    val value = url.queryParameter(name)
+                    val value = url.queryParameter(name)?.let { redactedValue(name, it) }
                     append("$name=$value")
                 }
             }
         }
+    }
+
+    private fun shouldFullyRedact(key: String): Boolean {
+        val normalizedKey = key.lowercase()
+        return normalizedKey.contains("secret") ||
+            normalizedKey.contains("certificate") ||
+            normalizedKey.contains("cert") ||
+            normalizedKey.contains("password")
+    }
+
+    private fun shouldPartiallyRedact(key: String): Boolean {
+        val normalizedKey = key.lowercase()
+        return normalizedKey.contains("authorization") ||
+            normalizedKey.contains("app_id") ||
+            normalizedKey == "appid" ||
+            normalizedKey.contains("token") ||
+            normalizedKey.contains("api_key") ||
+            normalizedKey.contains("apikey") ||
+            normalizedKey == "key" ||
+            normalizedKey == "voice_id"
+    }
+
+    private fun partialRedactionPrefixLength(key: String): Int {
+        val normalizedKey = key.lowercase()
+        return if (
+            normalizedKey.contains("app_id") ||
+            normalizedKey == "appid" ||
+            normalizedKey == "voice_id"
+        ) {
+            2
+        } else {
+            3
+        }
+    }
+
+    private fun partiallyRedact(value: String, prefixLength: Int = 3): String {
+        val prefix = value.take(prefixLength)
+        return if (prefix.isEmpty()) "<redacted>" else "$prefix***"
+    }
+
+    private fun redactedHeaderValue(key: String, value: String): String {
+        if (shouldFullyRedact(key)) {
+            return "<redacted>"
+        }
+        if (!shouldPartiallyRedact(key)) {
+            return value
+        }
+        if (key.contains("authorization", ignoreCase = true)) {
+            val prefix = "agora token="
+            if (value.startsWith(prefix, ignoreCase = true)) {
+                return prefix + partiallyRedact(value.drop(prefix.length), prefixLength = 3)
+            }
+        }
+        return partiallyRedact(value, prefixLength = partialRedactionPrefixLength(key))
+    }
+
+    private fun redactedValue(key: String, value: String): String {
+        return when {
+            shouldFullyRedact(key) -> "<redacted>"
+            shouldPartiallyRedact(key) -> partiallyRedact(value, partialRedactionPrefixLength(key))
+            else -> value
+        }
+    }
+
+    private fun redactedPath(path: String): String {
+        return path.replace(Regex("""/projects/([^/]+)""")) { match ->
+            "/projects/${partiallyRedact(match.groupValues[1], prefixLength = 2)}"
+        }
+    }
+
+    private fun redactedBodyString(bodyString: String): String {
+        return try {
+            when {
+                bodyString.trim().startsWith("{") -> redactJsonObject(JSONObject(bodyString)).toString()
+                bodyString.trim().startsWith("[") -> redactJsonArray(JSONArray(bodyString)).toString()
+                else -> redactStringFields(bodyString)
+            }
+        } catch (e: Exception) {
+            redactStringFields(bodyString)
+        }
+    }
+
+    private fun redactJsonObject(json: JSONObject): JSONObject {
+        val redacted = JSONObject()
+        val keys = json.keys()
+        while (keys.hasNext()) {
+            val key = keys.next()
+            redacted.put(key, redactJsonValue(key, json.opt(key)))
+        }
+        return redacted
+    }
+
+    private fun redactJsonArray(json: JSONArray): JSONArray {
+        val redacted = JSONArray()
+        for (index in 0 until json.length()) {
+            redacted.put(redactJsonValue(null, json.opt(index)))
+        }
+        return redacted
+    }
+
+    private fun redactJsonValue(key: String?, value: Any?): Any? {
+        if (key != null && shouldFullyRedact(key)) {
+            return "<redacted>"
+        }
+        if (key != null && shouldPartiallyRedact(key) && value is String) {
+            return partiallyRedact(value, partialRedactionPrefixLength(key))
+        }
+        return when (value) {
+            is JSONObject -> redactJsonObject(value)
+            is JSONArray -> redactJsonArray(value)
+            else -> value
+        }
+    }
+
+    private fun redactStringFields(bodyString: String): String {
+        return Regex(""""([^"]+)"\s*:\s*"([^"]*)"""", RegexOption.IGNORE_CASE)
+            .replace(bodyString) { match ->
+                val key = match.groupValues[1]
+                val value = match.groupValues[2]
+                if (shouldFullyRedact(key) || shouldPartiallyRedact(key)) {
+                    """"$key":"${redactedValue(key, value)}""""
+                } else {
+                    match.value
+                }
+            }
     }
 
     // Determine if logging should be completely skipped
@@ -214,7 +323,7 @@ class HttpLogger : Interceptor {
             append(")")
 
             response.headers.forEach { (name, value) ->
-                append("\n$name: $value")
+                append("\n$name: ${redactedHeaderValue(name, value)}")
             }
 
             responseBody.let { body ->
@@ -228,16 +337,8 @@ class HttpLogger : Interceptor {
                     val charset = contentType.charset() ?: Charset.defaultCharset()
                     if (contentLength != 0L) {
                         append("\n\n")
-                        var bodyString = buffer.clone().readString(charset)
-                        if (!BuildConfig.DEBUG) {
-                            SENSITIVE_PARAMS.forEach { param ->
-                                bodyString = bodyString.replace(
-                                    Regex(""""([^"]*$param[^"]*)"\s*:\s*"([^"]*)""", RegexOption.IGNORE_CASE),
-                                    """"$1":"***"""
-                                )
-                            }
-                        }
-                        append(formatJsonString(bodyString))
+                        val bodyString = buffer.clone().readString(charset)
+                        append(formatJsonString(redactedBodyString(bodyString)))
                     }
                 }
             }
