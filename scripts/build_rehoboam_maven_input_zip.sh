@@ -23,7 +23,7 @@ cd "$ROOT_DIR"
 
 ./gradlew :conversational-ai:packageMavenReleaseZip -PVERSION="$VERSION"
 
-ZIP_PATH="$ROOT_DIR/conversational-ai/build/distributions/agora-agent-client-toolkit-$VERSION-maven-release.zip"
+ZIP_PATH="$ROOT_DIR/conversational-ai/build/distributions/agora-agent-client-toolkit-$VERSION-maven-rehoboam-input.zip"
 if [[ ! -f "$ZIP_PATH" ]]; then
   echo "Missing generated Maven input zip: $ZIP_PATH" >&2
   exit 1

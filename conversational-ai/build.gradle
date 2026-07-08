@@ -85,7 +85,7 @@ tasks.register("packageMavenReleaseZip", Zip) {
     def releaseVersion = "${project.version}"
     def releaseBaseName = "${publishedArtifactId}-${releaseVersion}"
 
-    archiveFileName.set("${releaseBaseName}-maven-release.zip")
+    archiveFileName.set("${releaseBaseName}-maven-rehoboam-input.zip")
     destinationDirectory.set(layout.buildDirectory.dir("distributions"))
     includeEmptyDirs = false
 

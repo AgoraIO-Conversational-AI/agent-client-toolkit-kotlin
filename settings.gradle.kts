@@ -21,5 +21,5 @@ dependencyResolutionManagement {
 
 rootProject.name = "agent-client-toolkit-kotlin"
 include(":app")
+// Use the local toolkit module by default so sample and toolkit changes are validated together.
 include(":conversational-ai")
- 

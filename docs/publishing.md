@@ -60,7 +60,7 @@ VERSION=2.9.0-rc.1 scripts/build_rehoboam_maven_input_zip.sh
 The generated zip is:
 
 ```text
-conversational-ai/build/distributions/agora-agent-client-toolkit-<version>-maven-release.zip
+conversational-ai/build/distributions/agora-agent-client-toolkit-<version>-maven-rehoboam-input.zip
 ```
 
 The zip contains:
@@ -90,7 +90,7 @@ The generated POM must include:
 Before publishing, inspect the packaged POM:
 
 ```bash
-unzip -p conversational-ai/build/distributions/agora-agent-client-toolkit-<version>-maven-release.zip \
+unzip -p conversational-ai/build/distributions/agora-agent-client-toolkit-<version>-maven-rehoboam-input.zip \
   agora-agent-client-toolkit/agora-agent-client-toolkit-<version>.pom
 ```
 

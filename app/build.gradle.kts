@@ -154,7 +154,12 @@ android {
 }
 
 dependencies {
+    // Use the local toolkit module by default for development and sample validation.
     implementation(project(":conversational-ai"))
+
+    // Published Maven Toolkit verification: comment the local project dependency above,
+    // then uncomment this line after the target version is available in the Maven repo.
+    // implementation("io.agora.agents:agora-agent-client-toolkit:2.9.0")
 
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.appcompat)
