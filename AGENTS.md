@@ -107,7 +107,9 @@ For runtime structure, see `ARCHITECTURE.md`. For entry files, see `README.md`.
 - Standalone Gradle module `:conversational-ai` (package `io.agora.conversational.api`), depended on by `:app` via `implementation(project(":conversational-ai"))`
 - Wraps RTM message subscription/parsing
 - The quickstart currently reacts to:
-  - `onAgentStateChanged`
+  - `onAgentListeningChanged`
+  - `onAgentThinkingChanged`
+  - `onAgentSpeakingChanged`
   - `onTranscriptUpdated`
   - `onTurnFinished` (latency metrics)
   - `onAgentError` (logged through ViewModel state/logs)
@@ -299,18 +301,17 @@ The public `conversational-ai/README.md` should describe developer-facing API us
 
 Release strategy:
 
-- Do not use the final release version as the first validation artifact.
-- Package and publish an RC first, for example `2.9.0-rc.1`.
-- Validate the RC through staging / platform validation plus sample or clean-app consumption.
-- If fixes are needed before formal publish, drop the staging deployment and publish the next RC.
-- Publish the final version, for example `2.9.0`, only after the RC passes.
+- Do not publish release candidates. Only formal SemVer versions are allowed.
+- Validate the formal package through staging / platform validation plus sample or clean-app consumption before publishing.
 - If a problem is found after the final version is published, do not overwrite or delete that version; publish a new version such as `2.9.1`.
 
 To prepare the Rehoboam upload zip:
 
 ```bash
-VERSION=2.9.0-rc.1 scripts/build_rehoboam_maven_input_zip.sh
+VERSION=2.9.0 scripts/build_rehoboam_maven_input_zip.sh
 ```
+
+The script accepts only formal SemVer versions.
 
 The generated zip is:
 

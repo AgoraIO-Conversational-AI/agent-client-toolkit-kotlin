@@ -964,6 +964,7 @@ class ConversationalAIAPIImpl(val config: ConversationalAIAPIConfig) : IConversa
         )
     }
 
+    @Suppress("DEPRECATION")
     private fun handlePresenceStates(
         agentUserId: String,
         states: Map<String, String>,

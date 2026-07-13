@@ -46,8 +46,11 @@ Register your event handler. A typical handler starts with callbacks like:
 ```kotlin
 conversationalAIAPI.addHandler(object : IConversationalAIAPIEventHandler {
     override fun onAgentStateChanged(agentUserId: String, event: StateChangeEvent) {
-        // Render agent state.
+        // Existing aggregate-state integrations remain supported.
     }
+    override fun onAgentListeningChanged(agentUserId: String, isListening: Boolean) {}
+    override fun onAgentThinkingChanged(agentUserId: String, isThinking: Boolean) {}
+    override fun onAgentSpeakingChanged(agentUserId: String, isSpeaking: Boolean) {}
 
     override fun onTranscriptUpdated(agentUserId: String, transcript: Transcript) {
         // Render user or agent transcript.
@@ -60,6 +63,10 @@ conversationalAIAPI.addHandler(object : IConversationalAIAPIEventHandler {
     // Implement the remaining required callbacks for your app.
 })
 ```
+
+The aggregate `onAgentStateChanged` callback is deprecated but remains supported
+and continues to be delivered. Existing integrations do not need to migrate. Use
+the independent callbacks when multiple activity flags are needed.
 
 Load audio settings before joining RTC, then subscribe to the RTM message channel after RTC/RTM are ready:
 

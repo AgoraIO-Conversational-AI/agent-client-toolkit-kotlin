@@ -5,17 +5,12 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 VERSION="${VERSION:-}"
 
 if [[ -z "$VERSION" ]]; then
-  echo "Unable to resolve version. Pass VERSION=2.9.0-rc.1." >&2
+  echo "Unable to resolve version. Pass VERSION=2.9.0." >&2
   exit 1
 fi
 
-if [[ ! "$VERSION" =~ ^[0-9A-Za-z][0-9A-Za-z._-]*$ ]]; then
-  echo "Invalid version: $VERSION" >&2
-  exit 1
-fi
-
-if [[ "$VERSION" == *"-SNAPSHOT" ]]; then
-  echo "Rehoboam Maven input zip requires a non-SNAPSHOT version: $VERSION" >&2
+if [[ ! "$VERSION" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]; then
+  echo "Only formal SemVer versions are allowed: $VERSION" >&2
   exit 1
 fi
 

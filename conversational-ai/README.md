@@ -39,8 +39,11 @@ val conversationalAIAPI = ConversationalAIAPIImpl(
 
 val handler = object : IConversationalAIAPIEventHandler {
     override fun onAgentStateChanged(agentUserId: String, event: StateChangeEvent) {
-        // Render agent state.
+        // Existing aggregate-state integrations remain supported.
     }
+    override fun onAgentListeningChanged(agentUserId: String, isListening: Boolean) {}
+    override fun onAgentThinkingChanged(agentUserId: String, isThinking: Boolean) {}
+    override fun onAgentSpeakingChanged(agentUserId: String, isSpeaking: Boolean) {}
 
     override fun onAgentInterrupted(agentUserId: String, event: InterruptEvent) {
         // Handle interruption.
@@ -166,10 +169,10 @@ Implement `IConversationalAIAPIEventHandler` to receive callbacks.
 
 | Callback | Payload | Description |
 |----------|---------|-------------|
-| `onAgentStateChanged` | `StateChangeEvent` | Agent lifecycle state changed |
-| `onAgentListeningChanged` | `Boolean` | Convenience callback for listening state |
-| `onAgentThinkingChanged` | `Boolean` | Convenience callback for thinking state |
-| `onAgentSpeakingChanged` | `Boolean` | Convenience callback for speaking state |
+| `onAgentStateChanged` | `StateChangeEvent` | Deprecated but supported aggregate lifecycle state |
+| `onAgentListeningChanged` | `Boolean` | Independent listening state (recommended) |
+| `onAgentThinkingChanged` | `Boolean` | Independent thinking state (recommended) |
+| `onAgentSpeakingChanged` | `Boolean` | Independent speaking state (recommended) |
 | `onAgentInterrupted` | `InterruptEvent` | Agent turn was interrupted |
 | `onAgentMetrics` | `Metric` | Module latency or performance metric |
 | `onTurnFinished` | `Turn` | Completed-turn latency data |

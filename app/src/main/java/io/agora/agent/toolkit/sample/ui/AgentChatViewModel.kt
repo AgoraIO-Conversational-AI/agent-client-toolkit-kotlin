@@ -53,6 +53,17 @@ import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
 import java.util.UUID
 
+internal fun resolveAgentState(
+    isListening: Boolean,
+    isThinking: Boolean,
+    isSpeaking: Boolean,
+): AgentState = when {
+    isSpeaking -> AgentState.SPEAKING
+    isThinking -> AgentState.THINKING
+    isListening -> AgentState.LISTENING
+    else -> AgentState.SILENT
+}
+
 /**
  * ViewModel for managing conversation-related business logic
  */
@@ -137,6 +148,9 @@ class AgentChatViewModel : ViewModel() {
 
     private val _agentState = MutableStateFlow<AgentState>(AgentState.IDLE)
     val agentState: StateFlow<AgentState?> = _agentState.asStateFlow()
+    private var isAgentListening = false
+    private var isAgentThinking = false
+    private var isAgentSpeaking = false
 
     // Debug log list - for displaying logs in UI
     private val _debugLogList = MutableStateFlow<List<String>>(emptyList())
@@ -261,8 +275,22 @@ class AgentChatViewModel : ViewModel() {
     }
 
     private val conversationalAIAPIEventHandler = object : IConversationalAIAPIEventHandler {
-        override fun onAgentStateChanged(agentUserId: String, event: StateChangeEvent) {
-            _agentState.value = event.state
+        @Suppress("DEPRECATION")
+        override fun onAgentStateChanged(agentUserId: String, event: StateChangeEvent) {}
+
+        override fun onAgentListeningChanged(agentUserId: String, isListening: Boolean) {
+            isAgentListening = isListening
+            updateAgentActivityState()
+        }
+
+        override fun onAgentThinkingChanged(agentUserId: String, isThinking: Boolean) {
+            isAgentThinking = isThinking
+            updateAgentActivityState()
+        }
+
+        override fun onAgentSpeakingChanged(agentUserId: String, isSpeaking: Boolean) {
+            isAgentSpeaking = isSpeaking
+            updateAgentActivityState()
         }
 
         override fun onAgentInterrupted(agentUserId: String, event: InterruptEvent) {
@@ -324,6 +352,14 @@ class AgentChatViewModel : ViewModel() {
             // UI will only show ViewModel status messages (statusMessage)
             Log.d("conversationalAIAPI", log)
         }
+    }
+
+    private fun updateAgentActivityState() {
+        _agentState.value = resolveAgentState(
+            isListening = isAgentListening,
+            isThinking = isAgentThinking,
+            isSpeaking = isAgentSpeaking,
+        )
     }
 
     init {
@@ -1043,6 +1079,9 @@ class AgentChatViewModel : ViewModel() {
                 )
                 _transcriptList.value = emptyList()
                 pendingTurnLatencyMetrics.clear()
+                isAgentListening = false
+                isAgentThinking = false
+                isAgentSpeaking = false
                 _agentState.value = AgentState.IDLE
                 Log.d(TAG, "Hangup completed")
             } catch (e: Exception) {

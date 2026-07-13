@@ -707,10 +707,16 @@ sealed class ConversationalAIAPIError : Exception() {
  */
 interface IConversationalAIAPIEventHandler {
     /**
-     * Called when the agent state changes (silent, listening, thinking, speaking).
+     * Called when the aggregate agent state changes (silent, listening, thinking, speaking).
+     *
+     * @deprecated Use [onAgentListeningChanged], [onAgentThinkingChanged], and
+     * [onAgentSpeakingChanged] so independent activity flags are not collapsed.
      * @param agentUserId Agent user ID
      * @param event State change event
      */
+    @Deprecated(
+        message = "Use onAgentListeningChanged, onAgentThinkingChanged, and onAgentSpeakingChanged instead."
+    )
     fun onAgentStateChanged(agentUserId: String, event: StateChangeEvent)
 
     /**

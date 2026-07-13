@@ -16,28 +16,19 @@ VERSION=<version> scripts/build_rehoboam_maven_input_zip.sh
 
 ## Release Strategy
 
-Do not use the final release version as the first validation artifact. Treat a
-published Maven release as immutable.
+Treat a published Maven release as immutable. Do not publish release candidates.
 
 Recommended flow:
 
-1. Package and publish a release candidate first, for example `2.9.0-rc.1`.
-2. Validate the RC through the publishing platform's staging / validation flow.
-3. Consume the RC from the sample app or a clean test app and verify core APIs.
-4. If fixes are needed, publish the next RC, for example `2.9.0-rc.2`.
-5. Publish the final version, for example `2.9.0`, only after the RC passes.
+1. Build the final package, for example `2.9.0`.
+2. Validate it through the publishing platform's staging / validation flow.
+3. Consume it from the sample app or a clean test app and verify core APIs.
+4. Publish only after validation passes.
 
 If a problem is found before the deployment is formally published, drop the
 staging deployment and rebuild. If a problem is found after the final version is
 published, do not overwrite or delete that version; publish a new version such
 as `2.9.1`.
-
-Version guidance:
-
-- RC validation: `2.9.0-rc.1`, `2.9.0-rc.2`
-- Bug fix after final release: `2.9.0` -> `2.9.1`
-- Backward-compatible feature: `2.9.0` -> `2.10.0`
-- Breaking API change: `2.9.0` -> `3.0.0`
 
 ## SemVer and Changelog Gate
 
@@ -47,14 +38,14 @@ Every release must update `CHANGELOG.md`.
 - Minor releases may add optional APIs, optional event fields, new callbacks with default no-op behavior, or new supported protocol events.
 - Major releases are required for source or binary incompatible public API changes, changed defaults, changed callback timing, changed package identity, or higher minimum platform baselines that exclude existing consumers.
 
-Release candidates must include changelog entries. Do not promote an RC to final until package validation and sample or clean-app validation pass.
+Only formal SemVer versions are allowed.
 
 ## Package the Rehoboam Maven Input Zip
 
 Run:
 
 ```bash
-VERSION=2.9.0-rc.1 scripts/build_rehoboam_maven_input_zip.sh
+VERSION=2.9.0 scripts/build_rehoboam_maven_input_zip.sh
 ```
 
 The generated zip is:
@@ -99,8 +90,8 @@ unzip -p conversational-ai/build/distributions/agora-agent-client-toolkit-<versi
 1. `CHANGELOG.md` has a release entry for the version being packaged. The first public release must establish the compatibility baseline.
 2. Public API changes in `conversational-ai/src/main/java/io/agora/conversational/api/IConversationalAIAPI.kt` have been reviewed for SemVer impact.
 3. Public README files are aligned with the API surface and do not include internal publishing URLs or platform-specific release instructions.
-4. The release version is a non-SNAPSHOT version, for example `2.9.0-rc.1` or `2.9.0`.
-5. Before publishing the final version, a release candidate has passed sample / clean-app validation.
+4. The release version is a formal SemVer version, for example `2.9.0`.
+5. Before publishing, sample / clean-app validation has passed.
 6. Unit tests pass:
 
    ```bash
@@ -110,7 +101,7 @@ unzip -p conversational-ai/build/distributions/agora-agent-client-toolkit-<versi
 7. The package script succeeds:
 
    ```bash
-   VERSION=2.9.0-rc.1 scripts/build_rehoboam_maven_input_zip.sh
+   VERSION=2.9.0 scripts/build_rehoboam_maven_input_zip.sh
    ```
 
 8. The packaged POM includes `url` and `scm`.

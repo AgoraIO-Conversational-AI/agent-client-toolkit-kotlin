@@ -4,6 +4,16 @@ All notable changes to the Android Agora Conversational AI Toolkit will be docum
 
 The format follows Keep a Changelog style. This first public release establishes the compatibility baseline for future Android releases.
 
+## [Unreleased]
+
+### Changed
+
+- Deprecated the aggregate `onAgentStateChanged(...)` callback. Use
+  `onAgentListeningChanged(...)`, `onAgentThinkingChanged(...)`, and
+  `onAgentSpeakingChanged(...)` to track independent activity states. The
+  aggregate callback remains supported and continues to be delivered.
+- Removed release candidate support from Maven upload zip generation.
+
 ## [2.9.0] - 2026-07-02
 
 Initial public release.
