@@ -1,0 +1,174 @@
+plugins {
+    alias(libs.plugins.android.library)
+    alias(libs.plugins.kotlin.android)
+    id 'maven-publish'
+}
+
+def publishedGroupId = "io.agora.agents"
+def publishedArtifactId = "agora-agent-client-toolkit"
+def projectUrl = "https://github.com/AgoraIO-Conversational-AI/agent-client-toolkit-kotlin"
+def scmUrl = "https://github.com/AgoraIO-Conversational-AI/agent-client-toolkit-kotlin.git"
+def scmDeveloperUrl = "ssh://git@github.com/AgoraIO-Conversational-AI/agent-client-toolkit-kotlin.git"
+def rehoboamGroupId = findProperty("REHOBOAM_GROUP_ID") ?: System.getenv("REHOBOAM_GROUP_ID") ?: publishedGroupId
+def consumerMinCompileSdk = (findProperty("CONVOAI_API_MIN_COMPILE_SDK") ?: System.getenv("CONVOAI_API_MIN_COMPILE_SDK") ?: rootProject.ext.minSdkVersion).toString().toInteger()
+
+group = publishedGroupId
+version = findProperty("VERSION") ?: System.getenv("VERSION") ?: "0.1.0-SNAPSHOT"
+
+android {
+    namespace = 'io.agora.agents.toolkit'
+    compileSdk = rootProject.ext.compileSdkVersion
+
+    defaultConfig {
+        minSdk = rootProject.ext.minSdkVersion
+        consumerProguardFiles "consumer-rules.pro"
+        testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+
+        aarMetadata {
+            minCompileSdk = consumerMinCompileSdk
+        }
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled = false
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+
+    kotlinOptions {
+        jvmTarget = '17'
+    }
+}
+
+def androidJavadocsJar = tasks.register("androidJavadocsJar", Jar) {
+    archiveBaseName.set(publishedArtifactId)
+    archiveClassifier.set("javadoc")
+    from(projectDir) {
+        include "README.md"
+    }
+}
+
+def androidSourcesJar = tasks.register("androidSourcesJar", Jar) {
+    archiveBaseName.set(publishedArtifactId)
+    archiveClassifier.set("sources")
+    from("src/main/java")
+    from("src/main/kotlin")
+}
+
+tasks.withType(Jar).configureEach {
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+}
+
+tasks.withType(GenerateModuleMetadata).configureEach {
+    dependsOn(androidSourcesJar, androidJavadocsJar)
+}
+
+tasks.withType(GenerateMavenPom).configureEach {
+    dependsOn(androidSourcesJar, androidJavadocsJar)
+}
+
+tasks.matching { it.name == "releaseSourcesJar" }.configureEach {
+    enabled = false
+}
+
+tasks.register("packageMavenReleaseZip", Zip) {
+    group = "publishing"
+    description = "Package the release AAR, POM, sources jar, and javadoc jar for Maven / AAR publishing."
+    dependsOn("assembleRelease", "generatePomFileForReleasePublication", androidSourcesJar, androidJavadocsJar)
+
+    def releaseVersion = "${project.version}"
+    def releaseBaseName = "${publishedArtifactId}-${releaseVersion}"
+
+    archiveFileName.set("${releaseBaseName}-maven-rehoboam-input.zip")
+    destinationDirectory.set(layout.buildDirectory.dir("distributions"))
+    includeEmptyDirs = false
+
+    into(publishedArtifactId) {
+        from(layout.buildDirectory.file("publications/release/pom-default.xml")) {
+            filter { line ->
+                line.replace("<groupId>${publishedGroupId}</groupId>", "<groupId>${rehoboamGroupId}</groupId>")
+            }
+            rename { "${releaseBaseName}.pom" }
+        }
+        from(layout.buildDirectory.file("outputs/aar/${project.name}-release.aar")) {
+            rename { "${releaseBaseName}.aar" }
+        }
+        from(androidSourcesJar) {
+            rename { "${releaseBaseName}-sources.jar" }
+        }
+        from(androidJavadocsJar) {
+            rename { "${releaseBaseName}-javadoc.jar" }
+        }
+    }
+
+    doFirst {
+        if (releaseVersion.endsWith("-SNAPSHOT")) {
+            throw new GradleException("Maven release zip requires a non-SNAPSHOT version. Use VERSION=<release> scripts/build_rehoboam_maven_input_zip.sh or pass -PVERSION=<release>.")
+        }
+    }
+
+    doLast {
+        logger.lifecycle("Maven / AAR release zip: ${archiveFile.get().asFile}")
+        logger.lifecycle("Rehoboam POM groupId: ${rehoboamGroupId}")
+    }
+}
+
+afterEvaluate {
+    publishing {
+        publications {
+            create("release", MavenPublication) {
+                from components.release
+                artifactId = publishedArtifactId
+                artifact androidSourcesJar
+                artifact androidJavadocsJar
+
+                pom {
+                    name = "Agora Agent Client Toolkit"
+                    description = "Standalone Android library for Agora conversational AI messaging and transcript rendering."
+                    url = projectUrl
+
+                    scm {
+                        url = projectUrl
+                        connection = "scm:git:${scmUrl}"
+                        developerConnection = "scm:git:${scmDeveloperUrl}"
+                    }
+
+                    licenses {
+                        license {
+                            name = "MIT License"
+                            url = "http://www.opensource.org/licenses/mit-license.php"
+                            distribution = "repo"
+                        }
+                    }
+
+                    developers {
+                        developer {
+                            id = "agoraio"
+                            name = "Agora"
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+}
+
+dependencies {
+    compileOnly libs.agora.rtc.full
+    compileOnly libs.agora.rtm.lite
+
+    implementation libs.kotlinx.coroutines.android
+    implementation libs.gson
+
+    testImplementation libs.junit
+    testImplementation libs.json
+    androidTestImplementation libs.androidx.junit
+    androidTestImplementation libs.androidx.espresso.core
+}
