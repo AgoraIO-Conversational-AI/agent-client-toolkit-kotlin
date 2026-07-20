@@ -11,48 +11,14 @@ plugins {
 }
 
 val buildTimestamp = SimpleDateFormat("yyyyMMddHHmmss", Locale.US).format(Date())
-// Load env.example.properties as demo defaults, then override with local env.properties.
-val envDefaultProperties = Properties()
-val envDefaultPropertiesFile = rootProject.file("env.example.properties")
-if (envDefaultPropertiesFile.exists()) {
-    envDefaultPropertiesFile.reader(Charsets.UTF_8).use { envDefaultProperties.load(it) }
+val localProperties = Properties()
+val localPropertiesFile = rootProject.file("local.properties")
+if (localPropertiesFile.exists()) {
+    localPropertiesFile.reader(Charsets.UTF_8).use { localProperties.load(it) }
 }
-
-val envProperties = Properties()
-envProperties.putAll(envDefaultProperties)
-val localEnvProperties = Properties()
-val envPropertiesFile = rootProject.file("env.properties")
-if (envPropertiesFile.exists()) {
-    envPropertiesFile.reader(Charsets.UTF_8).use { localEnvProperties.load(it) }
-    envProperties.putAll(localEnvProperties)
-}
-
-// Validate required Agora configuration properties.
-// Demo LLM / TTS values are configurable through env.properties so the
-// demo can validate different startup payloads.
-val requiredProperties = listOf(
-    "APP_ID",
-    "APP_CERTIFICATE"
-)
-
-val missingProperties = mutableListOf<String>()
-requiredProperties.forEach { key ->
-    val value = localEnvProperties.getProperty(key)
-    if (value.isNullOrEmpty()) {
-        missingProperties.add(key)
-    }
-}
-
-if (missingProperties.isNotEmpty()) {
-    val errorMessage = buildString {
-        append("Please configure the following required properties in env.properties:\n")
-        missingProperties.forEach { prop ->
-            append("  - $prop\n")
-        }
-        append("\nPlease refer to env.example.properties for configuration reference.")
-    }
-    throw GradleException(errorMessage)
-}
+val agentBackendUrl = localProperties
+    .getProperty("agent.backend.url", "http://10.0.2.2:8000")
+    .trim()
 
 android {
     namespace = "io.agora.agent.toolkit"
@@ -67,8 +33,8 @@ android {
         applicationId = "io.agora.agent.toolkit.sample"
         minSdk = 26
         targetSdk = 36
-        versionCode = 1
-        versionName = "1.0"
+        versionCode = 2
+        versionName = "1.1"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
@@ -79,29 +45,7 @@ android {
             buildConfigField("String", name, "\"$escapedValue\"")
         }
 
-        fun buildConfigStringFromEnv(name: String, defaultValue: String = "") {
-            buildConfigString(name, envProperties.getProperty(name, defaultValue))
-        }
-
-        fun buildConfigNumber(type: String, name: String) {
-            val value = envProperties.getProperty(name)
-            if (value.isNullOrBlank()) {
-                throw GradleException("Please configure $name in env.example.properties or env.properties")
-            }
-            buildConfigField(type, name, value)
-        }
-
-        // Credentials must come from local env.properties, not example placeholders.
-        buildConfigString("APP_ID", localEnvProperties.getProperty("APP_ID").orEmpty())
-        buildConfigString("APP_CERTIFICATE", localEnvProperties.getProperty("APP_CERTIFICATE").orEmpty())
-        buildConfigStringFromEnv("LLM_URL")
-        buildConfigStringFromEnv("LLM_API_KEY")
-        buildConfigStringFromEnv("LLM_MODEL")
-        buildConfigStringFromEnv("TTS_VENDOR")
-        buildConfigStringFromEnv("TTS_KEY")
-        buildConfigStringFromEnv("TTS_MODEL_ID")
-        buildConfigStringFromEnv("TTS_VOICE_ID")
-        buildConfigNumber("int", "TTS_SAMPLE_RATE")
+        buildConfigString("AGENT_BACKEND_URL", agentBackendUrl)
     }
 
     signingConfigs {
@@ -167,6 +111,7 @@ dependencies {
     implementation(libs.androidx.constraintlayout)
     testImplementation(libs.junit)
     testImplementation(libs.json)
+    testImplementation(libs.okhttp.mockwebserver)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
 

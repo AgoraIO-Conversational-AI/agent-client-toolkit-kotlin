@@ -1,220 +1,247 @@
-# Architecture — Conversational AI Quickstart Android Kotlin
+# Architecture - Conversational AI Quickstart Android Kotlin
 
-## Architecture Overview
+## Overview
 
-This quickstart is a single-screen voice conversation demo built with Android Views + XML.
+This repository contains two runtime layers:
 
-Current scope:
+- an Android Views/XML voice client using Agora RTC, RTM, and the reusable
+  `:conversational-ai` toolkit module
+- a local Python FastAPI backend using `agora-agents==2.4.1`
 
-- Start Agent
-- RTC join + RTM login
-- Startup-time selection for independent SOS / EOS turn detection
-- Real-time transcript rendering
-- Optional completed-turn latency metrics
-- Agent status rendering
-- Mute / unmute
-- Text message sending
-- Image URL message sending
-- Agent interrupt
-- Manual SOS / EOS trigger buttons shown by selected detection modes
-- Stop Agent and cleanup
+```text
+Android app -- config/start/stop --> Python FastAPI -- Agora SDK --> ConvoAI
+     |                                                        |
+     +---------------- Agora RTC + RTM channels --------------+
+```
 
-Out of scope for this quickstart:
-
-- Multi-screen business flow
-- Backend-owned token / agent startup flow
-
-## Page Layout
-
-The Activity page is intentionally single-page and is organized into these regions:
-
-- title and subtitle
-- log panel
-- transcript panel
-- capability panel inside the transcript area for optional component abilities
-- transcript header with agent status and real-time data toggle
-- bottom start / mute / chat / stop controls
-- interrupt action over the transcript panel while connected
+The Android APK owns the realtime client experience. The backend owns App
+Certificate usage, user token generation, managed AI pipeline configuration,
+and runtime Agent lifecycle.
 
 ## Project Structure
 
 ```text
-app/src/main/java/
-└── io/agora/agent/toolkit/sample/
-    ├── ui/            # AgentChatActivity + ViewModel + manual turn / chat UI helpers
-    ├── api/           # AgentStarter + TokenGenerator + OkHttp config
-    ├── tools/         # Permission helpers
-    ├── KeyCenter.kt
-    └── AgentApp.kt
+app/
+|- src/main/java/io/agora/agent/toolkit/sample/
+|  |- api/AgentBackendClient.kt
+|  `- ui/AgentChatViewModel.kt
+|- src/debug/res/xml/common_security_config.xml
+`- src/test/.../AgentBackendClientTest.kt
 
-conversational-ai/src/main/java/io/agora/conversational/api/
-└── ...                # Reusable toolkit API, RTM parsing, transcript component
+conversational-ai/
+`- src/main/java/io/agora/conversational/api/  # reusable toolkit module
+
+server/
+|- src/agent.py        # AsyncAgora, managed pipeline, session lifecycle
+|- src/server.py       # FastAPI routes and response envelopes
+|- tests/              # mocked SDK/HTTP contract tests
+`- .env.example
+
+scripts/start_backend.sh
 ```
 
-## Runtime Shape
+The migration does not change the public API of `:conversational-ai` and does
+not copy toolkit source into the sample app.
+
+## Ownership
+
+Android owns:
+
+- microphone permission and UI state
+- RTC join/audio publish/audio subscribe
+- RTM login and message subscription
+- toolkit callbacks for Agent state, transcript, metrics, and errors
+- mute, interrupt, text/image chat, and manual SOS/EOS controls
+- immediate local cleanup on startup failure or hangup
+
+Python owns:
+
+- Agora App ID and App Certificate
+- unified user RTC+RTM token generation
+- Agent RTC token and Agora REST authentication through `agora-agents`
+- explicit Agora Fengming STT plus managed OpenAI LLM and MiniMax TTS
+  configuration
+- independent startup SOS/EOS mapping
+- Agent session start and stateful/stateless stop
+
+## Connection Flow
 
 ```text
-AgentChatActivity / AgentChatViewModel /
-RTC / RTM / ConversationalAIAPI / TokenGenerator / AgentStarter
+Tap Start
+  -> request microphone permission
+  -> GET /get_config?channel=<channel>&uid=<stable-user-uid>
+  -> initialize RTC + RTM + ConversationalAIAPI with returned App ID/UID
+  -> loadAudioSettings(AUDIO_SCENARIO_AI_CLIENT)
+  -> log in RTM with the returned unified token
+  -> join RTC and wait for the RTC join callback
+  -> subscribeMessage(returnedChannel)
+  -> wait for successful subscription callback
+  -> POST /startAgent with channel, user UID, agent UID, SOS, and EOS
+  -> save non-empty runtime agentId
+  -> uiState = Connected
 ```
 
-`:conversational-ai` parses RTM payloads, emits agent / transcript callbacks, and publishes RTM control messages such as interrupt and manual SOS/EOS.
+Agent startup is gated by all of:
 
-## Connection Flow (User taps Start Agent)
+- current connection attempt
+- RTC joined
+- RTM logged in
+- toolkit message subscription succeeded
+- returned user UID and agent UID available
+- startup SOS/EOS modes fixed
+
+`/startAgent` acceptance does not fabricate Agent state. Live state,
+transcripts, metrics, and Agent-side errors continue to arrive through RTM and
+the toolkit callbacks.
+
+## Backend API
+
+Every success response uses:
+
+```json
+{"code": 0, "data": {}, "msg": "success"}
+```
+
+Every route failure uses a non-2xx HTTP status and:
+
+```json
+{"code": 502, "data": null, "msg": "safe message"}
+```
+
+`AgentBackendClient` checks both the HTTP status and envelope `code`.
+
+### Get Config
+
+`GET /get_config` accepts optional `channel` and positive numeric `uid`. The
+Android app supplies both. The backend returns:
+
+```json
+{
+  "app_id": "<app-id>",
+  "token": "<user-rtc-rtm-token>",
+  "uid": "123456",
+  "agent_uid": "87654321",
+  "channel_name": "channel_kotlin_123456"
+}
+```
+
+The user token lifetime is 24 hours for the local demo. Android logs in to RTM
+with `uid.toString()` and joins RTC with the same numeric UID, so both identities
+match the token subject.
+
+### Start Agent
+
+```json
+{
+  "channelName": "channel_kotlin_123456",
+  "agentUid": 87654321,
+  "userUid": 123456,
+  "startOfSpeechMode": "vad",
+  "endOfSpeechMode": "semantic"
+}
+```
+
+`server/src/agent.py` maps the request into an SDK `Agent` and
+`create_async_session()` with:
+
+- unique session name
+- numeric string `agent_uid` and `remote_uids`
+- `enable_string_uid=false`
+- `idle_timeout=120`
+- `advanced_features.enable_sal=false`
+- `advanced_features.enable_rtm=true`
+- `parameters.data_channel=rtm`
+- metrics and error events enabled
+- session credential lifetime of 24 hours
+
+The pipeline explicitly uses Agora Fengming STT, managed OpenAI `gpt-4o-mini`,
+and MiniMax `speech_2_6_turbo` / `English_captivating_female1`.
+
+### Stop Agent
+
+`POST /stopAgent` accepts the runtime `agentId`. The backend first uses the
+tracked `AsyncAgentSession`; when the process no longer has that session, it
+falls back to `AsyncAgora.stop_agent(agentId)`. The SDK treats an already
+stopped Agent as success.
+
+FastAPI lifespan drains all tracked sessions during backend shutdown, so
+Ctrl+C does not leave locally started Agents running.
+
+## Stop And Failure Cleanup
+
+Startup failure:
 
 ```text
-Tap Start Agent
-  → use the top-right settings sheet's selected SOS / EOS detection modes
-  → check microphone permission
-  → generate userToken
-  → join RTC + login RTM
-  → subscribe RTM channel
-  → generate agentToken + authToken
-  → POST /join with server default ASR, explicit LLM / TTS blocks, and selected turn-detection modes
-  → save agentId
-  → uiState = Connected
+log safe failure
+  -> invalidate the current attempt
+  -> unsubscribe and destroy the toolkit
+  -> leave and destroy RTC
+  -> log out and release RTM
+  -> clear transient UIDs/Agent ID/state
+  -> uiState = Idle
 ```
 
-Kotlin-specific conventions:
+Hangup:
 
-- `userId` and `agentUid` are random 6-digit integers and do not conflict
-- `channelName` format is `channel_kotlin_<6-digit-random>`
-- REST auth header is `Authorization: agora token=<authToken>`
+```text
+capture runtime agentId
+  -> invalidate the current attempt
+  -> immediately destroy Toolkit/RTC/RTM and reset UI
+  -> asynchronously POST /stopAgent when an agentId exists
+```
 
-## Transcript Data Flow
+A delayed or failed backend stop is logged but cannot hold the Android app in
+`Connected`. Final ViewModel teardown also sends a best-effort stop for a known
+Agent ID. If teardown cancels an in-flight `/startAgent`, the backend request is
+allowed to finish in a process-level cleanup scope so any late Agent ID can be
+stopped immediately; `CancellationException` is still propagated to the caller.
+
+## Transcript And Controls
 
 ```text
 RTM message
-  → ConversationalAIAPI
-  → TranscriptController
-  → AgentChatViewModel.addTranscript(...)
-  → transcriptList update
-  → AgentChatActivity refreshes transcript bubbles
+  -> ConversationalAIAPI
+  -> AgentChatViewModel
+  -> StateFlow
+  -> AgentChatActivity
 ```
 
-The current UI renders:
+Transcripts are upserted by `(turnId, type)`. Completed-turn latency metrics are
+attached to the matching Agent transcript. Chat, interrupt, and manual SOS/EOS
+publish through `ConversationalAIAPI` using the backend-returned agent UID.
 
-- agent transcript on the left with `AI`
-- user transcript on the right with `Me`
-- optional completed-turn latency metrics for agent messages
+## Local Network Configuration
 
-## Chat / Interrupt Flow
+`./scripts/start_backend.sh` starts FastAPI on `0.0.0.0`, detects the active
+development-machine LAN IP, and updates this root `local.properties` entry:
 
-```text
-Tap chat
-  → choose Text or Image URL
-  → AgentChatViewModel.sendTextMessage(...) / sendImageUrlMessage(...)
-  → ConversationalAIAPI.chat(agentUserId, TextMessage/ImageMessage, completion)
-  → onMessageReceiptUpdated / onMessageError
-  → debugLogList update
-
-Tap Interrupt
-  → AgentChatViewModel.sendInterrupt()
-  → ConversationalAIAPI.interrupt(agentUserId, completion)
-  → onAgentInterrupted / state callback updates
+```properties
+agent.backend.url=http://<development-machine-lan-ip>:8000
 ```
 
-The message sheet accepts natural language text or an HTTP(S) image URL. Empty
-messages are rejected locally before publishing. Message receipts and errors are
-shown in the log panel.
+`PORT` may override the default, and the startup script writes the matching URL
+only after the selected port is available and the backend passes `/health`.
 
-## Manual Turn Flow
+Gradle maps it to `BuildConfig.AGENT_BACKEND_URL`. `localhost` is not valid for
+a physical phone because it refers to the phone. No USB tunnel, `adb reverse`,
+Gradle property override, or in-app host editor is used.
 
-```text
-Choose SOS and EOS detection modes in the top-right settings sheet before startup
-  → AgentStarter.startAgentAsync(..., sosDetectionMode, eosDetectionMode)
-  → /join uses the selected start_of_speech.mode / end_of_speech.mode values
-  → connected UI shows the capability panel for enabled manual actions
-Tap SOS or EOS
-  → AgentChatViewModel.manualSOS() / manualEOS()
-  → ConversationalAIAPI.manualSOS(...) / manualEOS(...)
-  → RTM publish with customType user.manual_sos / user.manual_eos
-  → server result event
-  → onUserManualSosEvent / onUserManualEosEvent / onAgentManualEosEvent
-  → debugLogList update
-  → AgentChatActivity refreshes log panel
-```
+Changing this host does not require USB. Installing the rebuilt app may use
+Android Studio USB or wireless device pairing.
 
-Each manual request uses a toolkit-generated non-empty `requestId` so the
-publish attempt can be correlated with the later server result callback.
-By default, the session uses `start_of_speech.mode = vad` and
-`end_of_speech.mode = semantic`, and the demo hides the capability panel. The
-`SOS` action is visible only when `SOS = manual`; the `EOS`
-action is visible only when `EOS = manual`.
+Debug resources allow local cleartext HTTP. Main/release network security keeps
+cleartext disabled.
 
-## UI State Rendering
+## Security Boundary
 
-```text
-uiState        → Start / Connecting / Mute / Chat / Stop buttons + optional capability and interrupt panels
-agentState     → transcript header status color + text
-transcriptList → transcript panel content + optional latency metrics
-debugLogList   → log panel content
-```
+The Android build must not contain:
 
-## Token Flow
+- App Certificate
+- provider API keys
+- local AccessToken2 signing code
+- Agent RTC token
+- Agora REST auth token/header
+- direct Agora `/join` or `/leave` URL
 
-The quickstart generates three token roles through `TokenGenerator`. In demo
-mode, `TokenGenerator` uses local AccessToken2 generation from
-`APP_CERTIFICATE` in `app/src/main/java/io/agora/dynamickey/media/RtcTokenBuilder2.java`:
-
-| Token | Purpose | Usage |
-|-------|---------|-------|
-| `userToken` | User RTC join + RTM login | `joinRtcChannel()` / `loginRtm()` |
-| `agentToken` | Agent RTC join credential | Request body `properties.token` |
-| `authToken` | REST API authentication | `Authorization: agora token=<authToken>` |
-
-Notes:
-
-- all three tokens are unified RTC + RTM tokens
-- `userToken` uses the current `channelName` so RTC join and RTM login are bound to the session channel
-- `agentToken` and `authToken` are generated after RTC / RTM are both ready
-- Production should replace demo-side token generation with a backend and must not embed `APP_CERTIFICATE`
-
-## Agent Lifecycle
-
-```text
-IDLE
-  → LISTENING
-  → THINKING
-  → SPEAKING
-  → LISTENING
-```
-
-Additional behavior:
-
-- `SILENT` can appear after interruption
-- tapping `Stop Agent` unsubscribes RTM, stops the Agent, leaves RTC, and resets UI state back toward idle
-
-## Config Contract
-
-```text
-env.example.properties + env.properties
-  → BuildConfig
-  → KeyCenter
-  → AgentStarter / TokenGenerator / ViewModel
-```
-
-Build-time required fields:
-
-- `APP_ID`
-- `APP_CERTIFICATE`
-
-The explicit LLM / TTS startup values are injected from the merged properties
-through `BuildConfig` and `KeyCenter`. Local `env.properties` overrides
-`env.example.properties`; `APP_ID` and `APP_CERTIFICATE` are read only from
-local `env.properties`. ASR uses the server default in the current sample.
-
-Current default request:
-
-- ASR: server default; no client-side `properties.asr` override
-- LLM: Groq OpenAI-compatible `llama-3.3-70b-versatile`
-- TTS: ElevenLabs `eleven_flash_v2_5`
-
-Provider keys in `env.example.properties` are placeholders. Production should
-move provider configuration and token generation to a backend.
-
-## Constraints
-
-- This is a demo; token generation and agent startup are client-side for convenience
-- Production should move token generation and REST startup to a backend
-- `:conversational-ai` is the reusable toolkit module; keep app-specific demo code in `:app`
+`server/.env.local`, `server/.venv`, and root `local.properties` are ignored by
+Git. The local backend is a quickstart service, not a hosted production design.
