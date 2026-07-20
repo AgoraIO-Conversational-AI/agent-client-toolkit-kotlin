@@ -40,6 +40,10 @@ server/.venv/bin/pip install -r server/requirements-dev.txt
 server/.venv/bin/python -m uvicorn server.src.server:app --host 0.0.0.0 --port 8000
 ```
 
+Successful `/get_config` responses use `Cache-Control: no-store`. The backend
+sets the Agora SDK request timeout to 25 seconds, below the Android client's
+30-second read timeout.
+
 ## Test
 
 ```bash

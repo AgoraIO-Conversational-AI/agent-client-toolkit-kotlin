@@ -61,9 +61,9 @@ builds keep cleartext disabled. The fallback `http://10.0.2.2:8000` value exists
 only so builds remain self-contained when `local.properties` has not been
 generated; it is not the physical-device path.
 
-Backend details and tests are in [server/README.md](./server/README.md). The
-migration contract and verification status are in
-[docs/python-backend-migration.md](./docs/python-backend-migration.md).
+Backend details and tests are in [server/README.md](./server/README.md).
+[ARCHITECTURE.md](./ARCHITECTURE.md) describes runtime ownership, startup, and
+cleanup behavior.
 
 ## Install
 

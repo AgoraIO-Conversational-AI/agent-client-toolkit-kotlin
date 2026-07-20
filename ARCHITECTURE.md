@@ -129,6 +129,9 @@ The user token lifetime is 24 hours for the local demo. Android logs in to RTM
 with `uid.toString()` and joins RTC with the same numeric UID, so both identities
 match the token subject.
 
+Successful `/get_config` responses use `Cache-Control: no-store` so the
+24-hour token is not stored by HTTP caches.
+
 ### Start Agent
 
 ```json
@@ -156,6 +159,10 @@ match the token subject.
 
 The pipeline explicitly uses Agora Fengming STT, managed OpenAI `gpt-4o-mini`,
 and MiniMax `speech_2_6_turbo` / `English_captivating_female1`.
+
+The backend configures `AsyncAgora` with a 25-second request timeout, below the
+Android client's 30-second read timeout. The backend must report SDK success or
+failure before Android cleans up without receiving an `agentId`.
 
 ### Stop Agent
 

@@ -35,7 +35,7 @@ If the backend contract or SDK session shape changes, update these together:
 3. `server/tests/`
 4. `AgentBackendClient.kt` and its tests
 5. `app/build.gradle.kts`
-6. `README.md`, `ARCHITECTURE.md`, and `docs/python-backend-migration.md`
+6. `README.md` and `ARCHITECTURE.md`
 7. this file
 
 ## Project Overview
@@ -92,6 +92,7 @@ For runtime structure, see `ARCHITECTURE.md`. For entry files, see `README.md`.
 - `stopAgent(agentId)`: asks the backend to stop the runtime Agent
 - validates HTTP status and the `{code,data,msg}` envelope
 - preserves safe backend messages in app debug logs
+- keeps the backend read timeout at 30 seconds, above the Python SDK timeout
 - never sends an App Certificate, provider key, agent token, or Agora REST auth token
 
 ### Python Backend
@@ -101,6 +102,8 @@ For runtime structure, see `ARCHITECTURE.md`. For entry files, see `README.md`.
   SDK sessions, and stateful/stateless stop paths
 - FastAPI lifespan stops every tracked Agent before the local backend exits
 - issues user RTC+RTM tokens with a 24-hour lifetime for this local demo
+- marks successful `/get_config` responses with `Cache-Control: no-store`
+- configures `AsyncAgora` with a 25-second request timeout
 - starts SDK sessions with `enable_string_uid=false`, `idle_timeout=120`, RTM
   events, metrics, and error messages enabled
 - keeps App ID/App Certificate in Git-ignored `server/.env.local`
