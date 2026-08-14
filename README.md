@@ -2,6 +2,69 @@
 
 A client-side Android toolkit for adding Agora Conversational AI features to apps already using Agora RTC and RTM. The library consumes existing RTC/RTM instances, adds agent state tracking, transcript parsing, and RTM-based messaging controls, and leaves token generation plus agent startup ownership to the host app.
 
+## Run The Android Demo
+
+The demo uses a local Python FastAPI backend built on
+[`agora-agents`](https://github.com/AgoraIO/agora-agents-python). A physical
+Android phone is the primary development path because it gives a representative
+microphone, speaker, echo cancellation, and network experience.
+
+Prerequisites:
+
+- Python 3.10 or newer
+- Android Studio with Android SDK 36
+- an Android phone and development machine on the same LAN
+- an Agora project with RTC, RTM, and Conversational AI enabled
+
+Configure the backend:
+
+```bash
+cp server/.env.example server/.env.local
+```
+
+Set `AGORA_APP_ID` and `AGORA_APP_CERTIFICATE` in `server/.env.local`, then run:
+
+```bash
+./scripts/start_backend.sh
+```
+
+On first use, the script creates `server/.venv` and installs the pinned Python
+dependencies. It starts FastAPI on `0.0.0.0:8000`, detects the development
+machine's active LAN IP, waits for `/health`, and updates only this Git-ignored
+entry in the root `local.properties`:
+
+```properties
+agent.backend.url=http://<development-machine-lan-ip>:8000
+```
+
+Set `PORT` in `server/.env.local` or before the command to use another free
+port. The script checks the selected port and waits for the backend health check
+before updating `local.properties`.
+
+The address is the current development machine's LAN address, not a fixed
+`192.168.1.20`. `localhost` would point to the phone itself. No USB tunnel,
+`adb reverse`, Gradle `-P` option, or in-app host setting is required.
+
+Changing the backend host does not require an active USB connection. Rebuild
+and install the app through Android Studio using either USB or wireless device
+pairing when you are ready to run it.
+
+Allow incoming Python connections in the development machine's firewall when
+prompted. Then build and run `:app` on the phone from Android Studio.
+
+Opening the printed backend URL with `/docs` shows the local API summary.
+The Android app itself contacts the backend only after **Start Agent** is
+tapped, so simply launching the Activity produces no backend request.
+
+Only debug builds allow cleartext HTTP for this local LAN workflow. Release
+builds keep cleartext disabled. The fallback `http://10.0.2.2:8000` value exists
+only so builds remain self-contained when `local.properties` has not been
+generated; it is not the physical-device path.
+
+Backend details and tests are in [server/README.md](./server/README.md).
+[ARCHITECTURE.md](./ARCHITECTURE.md) describes runtime ownership, startup, and
+cleanup behavior.
+
 ## Install
 
 Add the Maven repositories and the Conversational AI toolkit dependency:
