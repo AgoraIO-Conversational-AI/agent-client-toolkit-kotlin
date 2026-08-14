@@ -142,6 +142,8 @@ fun removeHandler(handler: IConversationalAIAPIEventHandler)
 fun subscribeMessage(channelName: String, completion: (ConversationalAIAPIError?) -> Unit)
 fun unsubscribeMessage(channelName: String, completion: (ConversationalAIAPIError?) -> Unit)
 fun chat(agentUserId: String, message: ChatMessage, completion: (ConversationalAIAPIError?) -> Unit)
+fun speak(agentUserId: String, message: SpeakMessage, completion: (ConversationalAIAPIError?) -> Unit)
+fun think(agentUserId: String, message: ThinkMessage, completion: (ConversationalAIAPIError?) -> Unit)
 fun interrupt(agentUserId: String, completion: (ConversationalAIAPIError?) -> Unit)
 fun manualSOS(agentUserId: String, completion: (String, ConversationalAIAPIError?) -> Unit)
 fun manualEOS(agentUserId: String, completion: (String, ConversationalAIAPIError?) -> Unit)
@@ -241,6 +243,44 @@ conversationalAIAPI.chat(
 
 Use `imageUrl` for large images. `imageBase64` must stay within RTM message size limits.
 
+Broadcast text directly through the agent's TTS pipeline:
+
+```kotlin
+conversationalAIAPI.speak(
+    agentUserId,
+    SpeakMessage(
+        text = "Please pay attention",
+        priority = Priority.APPEND,
+        interruptable = true
+    )
+) { error ->
+    // error is null when RTM publish succeeds.
+}
+```
+
+Send an instruction through the agent's LLM pipeline:
+
+```kotlin
+conversationalAIAPI.think(
+    agentUserId,
+    ThinkMessage(
+        text = "The user clicked the purchase button",
+        onListeningAction = ThinkListeningAction.INJECT,
+        onThinkingAction = ThinkThinkingAction.APPEND,
+        onSpeakingAction = ThinkSpeakingAction.APPEND,
+        metadata = mapOf("publisher" to "user123")
+    )
+) { error ->
+    // error is null when RTM publish succeeds.
+}
+```
+
+`speak(...)` publishes `assistant.transcription` and does not invoke the LLM.
+`think(...)` publishes `user.transcription` and is processed by the LLM. Think
+actions default to `INTERRUPT` while listening, `IGNORE` while thinking, and
+`IGNORE` while speaking. `metadata` is optional caller-supplied business data
+and is omitted from the RTM payload when null.
+
 Interrupt the agent:
 
 ```kotlin
@@ -276,7 +316,7 @@ through manual turn callbacks.
 | Type | Purpose |
 |------|---------|
 | `ConversationalAIAPIConfig` | Supplies `RtcEngine`, `RtmClient`, transcript render mode, and logging options |
-| `IConversationalAIAPI` | Main API for handlers, subscription, chat, interrupt, manual SOS/EOS, audio settings, and destroy |
+| `IConversationalAIAPI` | Main API for handlers, subscription, chat, speak, think, interrupt, manual SOS/EOS, audio settings, and destroy |
 | `IConversationalAIAPIEventHandler` | Main callback interface for state, transcripts, errors, metrics, receipts, manual turn results, and debug logs |
 | `Transcript` | UI-ready transcript payload with turn ID, user ID, text, status, type, and render mode |
 | `AgentState` | Agent lifecycle state: `IDLE`, `SILENT`, `LISTENING`, `THINKING`, `SPEAKING`, `UNKNOWN` |
@@ -284,7 +324,9 @@ through manual turn callbacks.
 | `UserManualEosEvent` | Result for a user-triggered manual EOS request |
 | `AgentManualEosEvent` | Automatic EOS notification in manual mode |
 | `ConversationalAIAPIError` | Error wrapper for RTM, RTC, and unknown failures |
-| `Priority` | Chat priority: `INTERRUPT`, `APPEND`, `IGNORE` |
+| `Priority` | Chat and speak priority: `INTERRUPT`, `APPEND`, `IGNORE` |
+| `SpeakMessage` | Direct TTS message with priority and interrupt behavior |
+| `ThinkMessage` | LLM instruction with per-state actions and optional metadata |
 
 ## Lifecycle Checklist
 

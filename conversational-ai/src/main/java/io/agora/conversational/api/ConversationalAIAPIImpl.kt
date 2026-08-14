@@ -92,6 +92,25 @@ internal fun resolveMessageType(msg: Map<String, Any>): MessageType {
     return MessageType.fromValue(messageType)
 }
 
+internal fun buildSpeakPayload(message: SpeakMessage): JSONObject {
+    return JSONObject().apply {
+        put("priority", message.priority.name)
+        put("interruptable", message.interruptable)
+        put("message", message.text)
+    }
+}
+
+internal fun buildThinkPayload(message: ThinkMessage): JSONObject {
+    return JSONObject().apply {
+        put("interruptable", message.interruptable)
+        put("message", message.text)
+        put("on_listening_action", message.onListeningAction.value)
+        put("on_thinking_action", message.onThinkingAction.value)
+        put("on_speaking_action", message.onSpeakingAction.value)
+        message.metadata?.let { put("metadata", JSONObject(it)) }
+    }
+}
+
 internal fun parseTurnFinishedEvent(
     publisherId: String,
     msg: Map<String, Any>,
@@ -602,6 +621,92 @@ class ConversationalAIAPIImpl(val config: ConversationalAIAPIConfig) : IConversa
 
             is ImageMessage -> {
                 sendImage(agentUserId, message, completion)
+            }
+        }
+    }
+
+    override fun speak(agentUserId: String, message: SpeakMessage, completion: (ConversationalAIAPIError?) -> Unit) {
+        val traceId = genTraceId
+        callMessagePrint(TAG, ">>> [traceId:$traceId] [speak] $agentUserId")
+
+        try {
+            val jsonMessage = buildSpeakPayload(message).toString()
+            val options = PublishOptions().apply {
+                setChannelType(RtmConstants.RtmChannelType.USER)
+                customType = MessageType.ASSISTANT.value
+            }
+
+            callMessagePrint(TAG, ">>> [traceId:$traceId] rtm publish $jsonMessage")
+            config.rtmClient.publish(
+                agentUserId,
+                jsonMessage,
+                options,
+                object : ResultCallback<Void> {
+                    override fun onSuccess(responseInfo: Void?) {
+                        callMessagePrint(TAG, "<<< [traceId:$traceId] rtm publish onSuccess")
+                        runOnMainThread { completion.invoke(null) }
+                    }
+
+                    override fun onFailure(errorInfo: ErrorInfo) {
+                        callMessagePrint(TAG, "<<< [traceId:$traceId] rtm publish onFailure ${errorInfo.str()}")
+                        runOnMainThread {
+                            val errorCode = RtmConstants.RtmErrorCode.getValue(errorInfo.errorCode)
+                            completion.invoke(
+                                ConversationalAIAPIError.RtmError(errorCode, errorInfo.errorReason)
+                            )
+                        }
+                    }
+                }
+            )
+        } catch (e: Exception) {
+            callMessagePrint(TAG, "[traceId:$traceId] [!] ${e.message}")
+            runOnMainThread {
+                completion.invoke(
+                    ConversationalAIAPIError.UnknownError("Message serialization failed: ${e.message}")
+                )
+            }
+        }
+    }
+
+    override fun think(agentUserId: String, message: ThinkMessage, completion: (ConversationalAIAPIError?) -> Unit) {
+        val traceId = genTraceId
+        callMessagePrint(TAG, ">>> [traceId:$traceId] [think] $agentUserId")
+
+        try {
+            val jsonMessage = buildThinkPayload(message).toString()
+            val options = PublishOptions().apply {
+                setChannelType(RtmConstants.RtmChannelType.USER)
+                customType = MessageType.USER.value
+            }
+
+            callMessagePrint(TAG, ">>> [traceId:$traceId] rtm publish $jsonMessage")
+            config.rtmClient.publish(
+                agentUserId,
+                jsonMessage,
+                options,
+                object : ResultCallback<Void> {
+                    override fun onSuccess(responseInfo: Void?) {
+                        callMessagePrint(TAG, "<<< [traceId:$traceId] rtm publish onSuccess")
+                        runOnMainThread { completion.invoke(null) }
+                    }
+
+                    override fun onFailure(errorInfo: ErrorInfo) {
+                        callMessagePrint(TAG, "<<< [traceId:$traceId] rtm publish onFailure ${errorInfo.str()}")
+                        runOnMainThread {
+                            val errorCode = RtmConstants.RtmErrorCode.getValue(errorInfo.errorCode)
+                            completion.invoke(
+                                ConversationalAIAPIError.RtmError(errorCode, errorInfo.errorReason)
+                            )
+                        }
+                    }
+                }
+            )
+        } catch (e: Exception) {
+            callMessagePrint(TAG, "[traceId:$traceId] [!] ${e.message}")
+            runOnMainThread {
+                completion.invoke(
+                    ConversationalAIAPIError.UnknownError("Message serialization failed: ${e.message}")
+                )
             }
         }
     }
