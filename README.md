@@ -150,6 +150,25 @@ conversationalAIAPI.subscribeMessage(channelName) { error ->
 See [conversational-ai/README.md](./conversational-ai/README.md) for the
 complete event handler interface and component API guide.
 
+## Validate Message APIs
+
+After the demo reaches the connected state, tap the message button in the
+bottom control bar. The message sheet provides four modes:
+
+- **Text** sends a `TextMessage` through `chat(...)`. Select any `Priority`
+  value and toggle `responseInterruptable`.
+- **Image** sends an image URL through `chat(...)`.
+- **Speak** sends a `SpeakMessage` directly through the agent's TTS pipeline.
+  Select any `Priority` value and toggle `interruptable`.
+- **Think** sends a `ThinkMessage` through the agent's LLM pipeline. Select every
+  listening, thinking, and speaking action independently. The initial selections
+  use the documented defaults: `INTERRUPT`, `IGNORE`, and `IGNORE`. The panel
+  also defaults `interruptable` to enabled and metadata to omitted. Enable the
+  metadata switch to send `source=kotlin_demo`.
+
+The debug log reports whether the RTM publish succeeded. Speak and Think are
+sent directly to the agent user ID and do not call the Python backend.
+
 ## Manual SOS/EOS
 
 If the agent is started with manual turn detection, use the toolkit to publish

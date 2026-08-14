@@ -13,12 +13,14 @@ import android.view.View
 import android.view.ViewGroup
 import android.view.WindowManager
 import android.view.inputmethod.EditorInfo
-import android.view.inputmethod.InputMethodManager
+import android.widget.ArrayAdapter
 import android.widget.ScrollView
 import android.widget.Toast
+import androidx.appcompat.widget.AppCompatSpinner
 import androidx.core.content.ContextCompat
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.isVisible
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.DiffUtil
@@ -39,6 +41,10 @@ import io.agora.agent.toolkit.sample.tools.PermissionHelp
 import io.agora.agent.toolkit.sample.ui.common.BaseActivity
 import io.agora.conversational.api.AgentState
 import io.agora.conversational.api.ConversationalAIAPI_VERSION
+import io.agora.conversational.api.Priority
+import io.agora.conversational.api.ThinkListeningAction
+import io.agora.conversational.api.ThinkSpeakingAction
+import io.agora.conversational.api.ThinkThinkingAction
 import io.agora.conversational.api.TranscriptType
 import kotlinx.coroutines.launch
 
@@ -55,11 +61,21 @@ class AgentChatActivity : BaseActivity<ActivityAgentChatBinding>() {
     // Track whether to automatically scroll to bottom
     private var autoScrollToBottom = true
     private var isScrollBottom = false
+    private var chatMessageMode = ChatMessageMode.TEXT
 
     private enum class ChatMessageMode {
         TEXT,
-        IMAGE
+        IMAGE,
+        SPEAK,
+        THINK
     }
+
+    private data class MessageSheetOptions(
+        val priorities: List<Priority>,
+        val listeningActions: List<ThinkListeningAction>,
+        val thinkingActions: List<ThinkThinkingAction>,
+        val speakingActions: List<ThinkSpeakingAction>
+    )
 
     override fun getViewBinding(): ActivityAgentChatBinding {
         return ActivityAgentChatBinding.inflate(layoutInflater)
@@ -207,89 +223,182 @@ class AgentChatActivity : BaseActivity<ActivityAgentChatBinding>() {
     private fun showChatMessageSheet() {
         val sheetBinding = BottomSheetChatMessageBinding.inflate(layoutInflater)
         val dialog = BottomSheetDialog(this)
-        var mode = ChatMessageMode.TEXT
-
-        fun applyMode(newMode: ChatMessageMode) {
-            mode = newMode
-            val isTextMode = mode == ChatMessageMode.TEXT
-            sheetBinding.btnChatModeText.setBackgroundResource(
-                if (isTextMode) R.drawable.selector_chat_mode_selected else R.drawable.selector_chat_mode_unselected
-            )
-            sheetBinding.btnChatModeText.setTextColor(
-                ContextCompat.getColor(this, if (isTextMode) R.color.white else R.color.text_subtitle)
-            )
-            sheetBinding.btnChatModeText.setIconTintResource(
-                if (isTextMode) R.color.white else R.color.text_subtitle
-            )
-            sheetBinding.btnChatModeImage.setBackgroundResource(
-                if (isTextMode) R.drawable.selector_chat_mode_unselected else R.drawable.selector_chat_mode_selected
-            )
-            sheetBinding.btnChatModeImage.setTextColor(
-                ContextCompat.getColor(this, if (isTextMode) R.color.text_subtitle else R.color.white)
-            )
-            sheetBinding.btnChatModeImage.setIconTintResource(
-                if (isTextMode) R.color.text_subtitle else R.color.white
-            )
-            sheetBinding.etChatMessage.hint = if (isTextMode) "Type a message" else "Paste image URL"
-            sheetBinding.etChatMessage.inputType = if (isTextMode) {
-                InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_CAP_SENTENCES
-            } else {
-                InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_URI
-            }
-            sheetBinding.etChatMessage.setSingleLine(true)
-        }
-
-        fun sendMessage(): Boolean {
-            val input = sheetBinding.etChatMessage.text?.toString().orEmpty()
-            val sent = when (mode) {
-                ChatMessageMode.TEXT -> viewModel.sendTextMessage(input)
-                ChatMessageMode.IMAGE -> viewModel.sendImageUrlMessage(input)
-            }
-            if (sent) {
-                dialog.dismiss()
-            }
-            return sent
-        }
-
-        dialog.setContentView(sheetBinding.root)
-        dialog.window?.setSoftInputMode(
-            WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE or
-                WindowManager.LayoutParams.SOFT_INPUT_STATE_ALWAYS_VISIBLE
+        val options = MessageSheetOptions(
+            priorities = Priority.entries,
+            listeningActions = ThinkListeningAction.entries,
+            thinkingActions = ThinkThinkingAction.entries,
+            speakingActions = ThinkSpeakingAction.entries
         )
-        dialog.setOnShowListener {
-            dialog.findViewById<View>(com.google.android.material.R.id.design_bottom_sheet)
-                ?.setBackgroundResource(R.drawable.bg_bottom_sheet)
-            sheetBinding.etChatMessage.requestFocus()
-            sheetBinding.etChatMessage.post {
-                val inputMethodManager =
-                    getSystemService(Context.INPUT_METHOD_SERVICE) as? InputMethodManager
-                inputMethodManager?.showSoftInput(
-                    sheetBinding.etChatMessage,
-                    InputMethodManager.SHOW_IMPLICIT
-                )
-            }
+
+        chatMessageMode = ChatMessageMode.TEXT
+        configureMessageSheetOptions(sheetBinding, options)
+        renderChatMessageMode(sheetBinding)
+        bindMessageSheetListeners(sheetBinding, dialog, options)
+        configureMessageSheetDialog(sheetBinding, dialog)
+        dialog.show()
+    }
+
+    private fun configureMessageSheetOptions(binding: BottomSheetChatMessageBinding, options: MessageSheetOptions) {
+        setSpinnerItems(binding.spinnerMessagePriority, options.priorities.map { it.name })
+        setSpinnerItems(binding.spinnerThinkListening, options.listeningActions.map { it.name })
+        setSpinnerItems(binding.spinnerThinkThinking, options.thinkingActions.map { it.name })
+        setSpinnerItems(binding.spinnerThinkSpeaking, options.speakingActions.map { it.name })
+
+        binding.spinnerMessagePriority.setSelection(options.priorities.indexOf(Priority.INTERRUPT))
+        binding.spinnerThinkListening.setSelection(
+            options.listeningActions.indexOf(ThinkListeningAction.INTERRUPT)
+        )
+        binding.spinnerThinkThinking.setSelection(
+            options.thinkingActions.indexOf(ThinkThinkingAction.IGNORE)
+        )
+        binding.spinnerThinkSpeaking.setSelection(
+            options.speakingActions.indexOf(ThinkSpeakingAction.IGNORE)
+        )
+        binding.switchMessageInterruptable.isChecked = true
+        binding.switchThinkMetadata.isChecked = false
+    }
+
+    private fun setSpinnerItems(spinner: AppCompatSpinner, labels: List<String>) {
+        spinner.adapter = ArrayAdapter(
+            this,
+            android.R.layout.simple_spinner_item,
+            labels
+        ).apply {
+            setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
+        }
+    }
+
+    private fun renderChatMessageMode(binding: BottomSheetChatMessageBinding) {
+        listOf(
+            binding.btnChatModeText to ChatMessageMode.TEXT,
+            binding.btnChatModeImage to ChatMessageMode.IMAGE,
+            binding.btnChatModeSpeak to ChatMessageMode.SPEAK,
+            binding.btnChatModeThink to ChatMessageMode.THINK
+        ).forEach { (button, buttonMode) ->
+            val selected = chatMessageMode == buttonMode
+            button.setBackgroundResource(
+                if (selected) R.drawable.selector_chat_mode_selected else R.drawable.selector_chat_mode_unselected
+            )
+            button.setTextColor(
+                ContextCompat.getColor(this, if (selected) R.color.white else R.color.text_subtitle)
+            )
+            button.setIconTintResource(
+                if (selected) R.color.white else R.color.text_subtitle
+            )
         }
 
-        sheetBinding.btnChatModeText.setOnClickListener {
-            applyMode(ChatMessageMode.TEXT)
+        binding.etChatMessage.hint = when (chatMessageMode) {
+            ChatMessageMode.TEXT -> "Type a chat message"
+            ChatMessageMode.IMAGE -> "Paste image URL"
+            ChatMessageMode.SPEAK -> "Text for direct speech"
+            ChatMessageMode.THINK -> "Instruction for the LLM"
         }
-        sheetBinding.btnChatModeImage.setOnClickListener {
-            applyMode(ChatMessageMode.IMAGE)
+        binding.etChatMessage.inputType =
+            if (chatMessageMode == ChatMessageMode.IMAGE) {
+                InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_URI
+            } else {
+                InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_CAP_SENTENCES
+            }
+        binding.etChatMessage.setSingleLine(true)
+        val isKeyboardVisible = ViewCompat.getRootWindowInsets(binding.root)
+            ?.isVisible(WindowInsetsCompat.Type.ime()) == true
+        renderMessageSheetCompactMode(binding, isKeyboardVisible)
+    }
+
+    private fun renderMessageSheetCompactMode(
+        binding: BottomSheetChatMessageBinding,
+        isKeyboardVisible: Boolean
+    ) {
+        binding.rowMessagePriority.isVisible =
+            !isKeyboardVisible &&
+                    (chatMessageMode == ChatMessageMode.TEXT || chatMessageMode == ChatMessageMode.SPEAK)
+        binding.llThinkOptions.isVisible =
+            !isKeyboardVisible && chatMessageMode == ChatMessageMode.THINK
+        binding.rowMessageInterruptable.isVisible =
+            !isKeyboardVisible && chatMessageMode != ChatMessageMode.IMAGE
+    }
+
+    private fun bindMessageSheetListeners(
+        binding: BottomSheetChatMessageBinding,
+        dialog: BottomSheetDialog,
+        options: MessageSheetOptions
+    ) {
+        listOf(
+            binding.btnChatModeText to ChatMessageMode.TEXT,
+            binding.btnChatModeImage to ChatMessageMode.IMAGE,
+            binding.btnChatModeSpeak to ChatMessageMode.SPEAK,
+            binding.btnChatModeThink to ChatMessageMode.THINK
+        ).forEach { (button, mode) ->
+            button.setOnClickListener {
+                chatMessageMode = mode
+                renderChatMessageMode(binding)
+            }
         }
-        sheetBinding.btnSendChatMessage.setOnClickListener {
-            sendMessage()
+        binding.btnSendChatMessage.setOnClickListener {
+            sendMessageFromSheet(binding, dialog, options)
         }
-        sheetBinding.etChatMessage.setOnEditorActionListener { _, actionId, _ ->
+        binding.etChatMessage.setOnEditorActionListener { _, actionId, _ ->
             if (actionId == EditorInfo.IME_ACTION_SEND) {
-                sendMessage()
+                sendMessageFromSheet(binding, dialog, options)
                 true
             } else {
                 false
             }
         }
+    }
 
-        applyMode(ChatMessageMode.TEXT)
-        dialog.show()
+    private fun sendMessageFromSheet(
+        binding: BottomSheetChatMessageBinding,
+        dialog: BottomSheetDialog,
+        options: MessageSheetOptions
+    ) {
+        val input = binding.etChatMessage.text?.toString().orEmpty()
+        val sent = when (chatMessageMode) {
+            ChatMessageMode.TEXT -> viewModel.sendTextMessage(
+                text = input,
+                priority = options.priorities[binding.spinnerMessagePriority.selectedItemPosition],
+                responseInterruptable = binding.switchMessageInterruptable.isChecked
+            )
+
+            ChatMessageMode.IMAGE -> viewModel.sendImageUrlMessage(input)
+            ChatMessageMode.SPEAK -> viewModel.sendSpeakMessage(
+                text = input,
+                priority = options.priorities[binding.spinnerMessagePriority.selectedItemPosition],
+                interruptable = binding.switchMessageInterruptable.isChecked
+            )
+
+            ChatMessageMode.THINK -> viewModel.sendThinkMessage(
+                text = input,
+                onListeningAction = options.listeningActions[binding.spinnerThinkListening.selectedItemPosition],
+                onThinkingAction = options.thinkingActions[binding.spinnerThinkThinking.selectedItemPosition],
+                onSpeakingAction = options.speakingActions[binding.spinnerThinkSpeaking.selectedItemPosition],
+                interruptable = binding.switchMessageInterruptable.isChecked,
+                includeMetadata = binding.switchThinkMetadata.isChecked
+            )
+        }
+        if (sent) dialog.dismiss()
+    }
+
+    private fun configureMessageSheetDialog(
+        binding: BottomSheetChatMessageBinding,
+        dialog: BottomSheetDialog
+    ) {
+        dialog.setContentView(binding.root)
+        dialog.window?.setSoftInputMode(
+            WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE
+        )
+        ViewCompat.setOnApplyWindowInsetsListener(binding.root) { _, insets ->
+            renderMessageSheetCompactMode(
+                binding,
+                insets.isVisible(WindowInsetsCompat.Type.ime())
+            )
+            insets
+        }
+        dialog.setOnShowListener {
+            dialog.findViewById<View>(com.google.android.material.R.id.design_bottom_sheet)
+                ?.setBackgroundResource(R.drawable.bg_bottom_sheet)
+            ViewCompat.requestApplyInsets(binding.root)
+        }
     }
 
     private fun showSettingsSheet() {
@@ -311,9 +420,8 @@ class AgentChatActivity : BaseActivity<ActivityAgentChatBinding>() {
         sheetBinding.tvVersionInfo.text =
             "Demo v${BuildConfig.VERSION_NAME}  |  Component v$ConversationalAIAPI_VERSION"
         val agentId = state.agentId.orEmpty()
-        sheetBinding.rowAgentId.visibility = if (agentId.isNotBlank()) View.VISIBLE else View.GONE
-        sheetBinding.dividerAgentId.visibility =
-            if (agentId.isNotBlank()) View.VISIBLE else View.GONE
+        sheetBinding.rowAgentId.isVisible = agentId.isNotBlank()
+        sheetBinding.dividerAgentId.isVisible = agentId.isNotBlank()
         sheetBinding.tvAgentId.text = agentId
         sheetBinding.btnCopyAgentId.setOnClickListener {
             copyAgentId(agentId)
@@ -484,16 +592,16 @@ class AgentChatActivity : BaseActivity<ActivityAgentChatBinding>() {
                     val isConnecting = state.connectionState == AgentChatViewModel.ConnectionState.Connecting
 
                     // Show/hide buttons
-                    llStart.visibility = if (isConnected) View.GONE else View.VISIBLE
-                    llControls.visibility = if (isConnected) View.VISIBLE else View.GONE
-                    llInterruptPanel.visibility = if (isConnected) View.VISIBLE else View.GONE
+                    llStart.isVisible = !isConnected
+                    llControls.isVisible = isConnected
+                    llInterruptPanel.isVisible = isConnected
                     updateTranscriptBottomPadding(isConnected)
                     val messageControlsEnabled = isConnected
                     btnChat.isEnabled = messageControlsEnabled
                     btnInterrupt.isEnabled = messageControlsEnabled
                     tvTurnDetectionMode.text =
                         "SOS: ${state.sosDetectionMode.displayName}  |  " +
-                            "EOS: ${state.eosDetectionMode.displayName}"
+                                "EOS: ${state.eosDetectionMode.displayName}"
                     val settingsTint = if (state.canChangeTurnDetectionMode) {
                         R.color.mic_normal_icon
                     } else {
@@ -501,15 +609,11 @@ class AgentChatActivity : BaseActivity<ActivityAgentChatBinding>() {
                     }
                     btnSettings.setColorFilter(ContextCompat.getColor(this@AgentChatActivity, settingsTint))
                     val showCapabilityPanel = isConnected && state.isManualTurnDetectionEnabled
-                    llCapabilityPanel.visibility = if (showCapabilityPanel) View.VISIBLE else View.GONE
-                    btnManualSos.visibility = if (state.isManualSosEnabled) View.VISIBLE else View.GONE
-                    manualActionDivider.visibility =
-                        if (state.isManualSosEnabled && state.isManualEosEnabled) {
-                            View.VISIBLE
-                        } else {
-                            View.GONE
-                        }
-                    btnManualEos.visibility = if (state.isManualEosEnabled) View.VISIBLE else View.GONE
+                    llCapabilityPanel.isVisible = showCapabilityPanel
+                    btnManualSos.isVisible = state.isManualSosEnabled
+                    manualActionDivider.isVisible =
+                        state.isManualSosEnabled && state.isManualEosEnabled
+                    btnManualEos.isVisible = state.isManualEosEnabled
 
                     // Update button style based on connection state
                     when {
@@ -517,8 +621,14 @@ class AgentChatActivity : BaseActivity<ActivityAgentChatBinding>() {
                             btnStart.text = "Connecting..."
                             btnStart.isEnabled = false
                             btnStart.setBackgroundResource(R.drawable.bg_start_button_disabled)
-                            btnStart.setTextColor(ContextCompat.getColor(this@AgentChatActivity, R.color.btn_disabled_text))
+                            btnStart.setTextColor(
+                                ContextCompat.getColor(
+                                    this@AgentChatActivity,
+                                    R.color.btn_disabled_text
+                                )
+                            )
                         }
+
                         else -> {
                             btnStart.text = "Start Agent"
                             btnStart.isEnabled = true
@@ -615,11 +725,14 @@ class AgentChatActivity : BaseActivity<ActivityAgentChatBinding>() {
                         // Determine log level color based on content keywords
                         val colorRes = when {
                             log.contains("failed", ignoreCase = true) ||
-                            log.contains("error", ignoreCase = true) -> R.color.error_red_light
+                                    log.contains("error", ignoreCase = true) -> R.color.error_red_light
+
                             log.contains("successfully", ignoreCase = true) ||
-                            log.contains("success", ignoreCase = true) -> R.color.success_green_light
+                                    log.contains("success", ignoreCase = true) -> R.color.success_green_light
+
                             log.contains("connecting", ignoreCase = true) ||
-                            log.contains("starting", ignoreCase = true) -> R.color.warning_amber_light
+                                    log.contains("starting", ignoreCase = true) -> R.color.warning_amber_light
+
                             else -> R.color.text_secondary
                         }
                         spannable.setSpan(
@@ -670,7 +783,8 @@ class AgentChatActivity : BaseActivity<ActivityAgentChatBinding>() {
 /**
  * Adapter for displaying transcript list with different view types for USER and AGENT
  */
-class TranscriptAdapter : ListAdapter<AgentChatViewModel.TranscriptItem, RecyclerView.ViewHolder>(TranscriptDiffCallback()) {
+class TranscriptAdapter :
+    ListAdapter<AgentChatViewModel.TranscriptItem, RecyclerView.ViewHolder>(TranscriptDiffCallback()) {
     private var isLatencyMetricsVisible = true
 
     companion object {
@@ -736,7 +850,7 @@ class TranscriptAdapter : ListAdapter<AgentChatViewModel.TranscriptItem, Recycle
             isLatencyMetricsVisible: Boolean
         ) {
             val shouldShow = isLatencyMetricsVisible && metrics != null
-            binding.llLatencyMetrics.visibility = if (shouldShow) View.VISIBLE else View.GONE
+            binding.llLatencyMetrics.isVisible = shouldShow
             if (metrics == null) {
                 binding.tvLatencyTurn.text = ""
                 binding.tvLatencySummary.text = ""
@@ -769,7 +883,7 @@ class TranscriptAdapter : ListAdapter<AgentChatViewModel.TranscriptItem, Recycle
             newItem: AgentChatViewModel.TranscriptItem
         ): Boolean {
             return oldItem.transcript.turnId == newItem.transcript.turnId &&
-                oldItem.transcript.type == newItem.transcript.type
+                    oldItem.transcript.type == newItem.transcript.type
         }
 
         override fun areContentsTheSame(

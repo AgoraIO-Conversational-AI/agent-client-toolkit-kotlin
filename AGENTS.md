@@ -46,7 +46,7 @@ The Android client obtains session config from the Python backend, joins Agora
 RTC/RTM, subscribes the toolkit message channel, then asks the backend to start
 the Agent. App credentials and provider configuration remain on the server.
 
-Current quickstart scope is limited to voice session startup, independent startup-time selection for SOS / EOS detection, transcript display with optional latency metrics, state rendering, mute, text / image URL message sending, interrupt, a capability panel for enabled manual trigger buttons, and stop.
+Current quickstart scope is limited to voice session startup, independent startup-time selection for SOS / EOS detection, transcript display with optional latency metrics, state rendering, mute, text / image URL message sending, speak / think validation, interrupt, a capability panel for enabled manual trigger buttons, and stop.
 
 ## Tech Stack
 
@@ -80,7 +80,7 @@ For runtime structure, see `ARCHITECTURE.md`. For entry files, see `README.md`.
   - `debugLogList: StateFlow<List<String>>` — debug logs (max 20 entries)
 - Auto flow: get backend config → login RTM → join RTC → subscribe RTM messages → backend start Agent
 - Startup failure flow: backend/transport/subscription/startup failures release partial startup side effects and return UI state to `Idle`
-- Message flow: connected UI can send text messages, image URL messages, and interrupt requests through ConversationalAIAPI
+- Message flow: connected UI can send text messages, image URL messages, speak / think requests, and interrupt requests through ConversationalAIAPI
 - Manual flow: the top-right Settings sheet chooses SOS / EOS detection modes before startup; after connection, the capability panel exposes buttons only for modes set to `manual`
 - `userId` is a stable locally generated non-zero UID for the app process. The backend honors it when generating the unified user token and returns a separate agent UID.
 
@@ -127,7 +127,7 @@ For runtime structure, see `ARCHITECTURE.md`. For entry files, see `README.md`.
   - `onUserManualEosEvent`
   - `onAgentManualEosEvent`
   - `onDebugLog`
-- The connected UI can call `chat(agentUserId, TextMessage/ImageMessage, completion)` and `interrupt(agentUserId, completion)`
+- The connected UI can call `chat(agentUserId, TextMessage/ImageMessage, completion)`, `speak(agentUserId, SpeakMessage, completion)`, `think(agentUserId, ThinkMessage, completion)`, and `interrupt(agentUserId, completion)`
 - The public manual turn methods are `manualSOS(agentUserId, completion)` and `manualEOS(agentUserId, completion)`; the toolkit generates `requestId` internally and returns it through the completion callback
 - Audio settings: `loadAudioSettings(AUDIO_SCENARIO_AI_CLIENT)` (must be called before joinChannel)
 
