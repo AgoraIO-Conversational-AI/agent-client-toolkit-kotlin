@@ -20,7 +20,7 @@ Treat a published Maven release as immutable. Do not publish release candidates.
 
 Recommended flow:
 
-1. Build the final package, for example `2.9.0`.
+1. Build the final package using the release version.
 2. Validate it through the publishing platform's staging / validation flow.
 3. Consume it from the sample app or a clean test app and verify core APIs.
 4. Publish only after validation passes.
@@ -45,8 +45,10 @@ Only formal SemVer versions are allowed.
 Run:
 
 ```bash
-VERSION=2.9.0 scripts/build_rehoboam_maven_input_zip.sh
+VERSION=<version> scripts/build_rehoboam_maven_input_zip.sh
 ```
+
+Replace `<version>` with the formal SemVer version being released.
 
 The generated zip is:
 
@@ -90,7 +92,7 @@ unzip -p conversational-ai/build/distributions/agora-agent-client-toolkit-<versi
 1. `CHANGELOG.md` has a release entry for the version being packaged. The first public release must establish the compatibility baseline.
 2. Public API changes in `conversational-ai/src/main/java/io/agora/conversational/api/IConversationalAIAPI.kt` have been reviewed for SemVer impact.
 3. Public README files are aligned with the API surface and do not include internal publishing URLs or platform-specific release instructions.
-4. The release version is a formal SemVer version, for example `2.9.0`.
+4. The release version is a formal SemVer version.
 5. Before publishing, sample / clean-app validation has passed.
 6. Unit tests pass:
 
@@ -101,7 +103,7 @@ unzip -p conversational-ai/build/distributions/agora-agent-client-toolkit-<versi
 7. The package script succeeds:
 
    ```bash
-   VERSION=2.9.0 scripts/build_rehoboam_maven_input_zip.sh
+   VERSION=<version> scripts/build_rehoboam_maven_input_zip.sh
    ```
 
 8. The packaged POM includes `url` and `scm`.

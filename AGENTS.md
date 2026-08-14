@@ -273,10 +273,11 @@ Release strategy:
 To prepare the Rehoboam upload zip:
 
 ```bash
-VERSION=2.9.0 scripts/build_rehoboam_maven_input_zip.sh
+VERSION=<version> scripts/build_rehoboam_maven_input_zip.sh
 ```
 
-The script accepts only formal SemVer versions.
+Replace `<version>` with the version being released. The script accepts only
+formal SemVer versions.
 
 The generated zip is:
 
