@@ -370,7 +370,7 @@
             android:layout_width="64dp"
             android:layout_height="64dp"
             android:background="@drawable/bg_button_mute_selector"
-            android:contentDescription="Send chat message"
+            android:contentDescription="Open message APIs"
             android:padding="17dp"
             android:scaleType="centerInside"
             app:srcCompat="@drawable/ic_message_text"

@@ -22,7 +22,12 @@ import io.agora.conversational.api.Metric
 import io.agora.conversational.api.ModuleError
 import io.agora.conversational.api.Priority
 import io.agora.conversational.api.StateChangeEvent
+import io.agora.conversational.api.SpeakMessage
 import io.agora.conversational.api.TextMessage
+import io.agora.conversational.api.ThinkListeningAction
+import io.agora.conversational.api.ThinkMessage
+import io.agora.conversational.api.ThinkSpeakingAction
+import io.agora.conversational.api.ThinkThinkingAction
 import io.agora.conversational.api.Transcript
 import io.agora.conversational.api.TranscriptType
 import io.agora.conversational.api.Turn
@@ -266,7 +271,8 @@ class AgentChatViewModel : ViewModel() {
 
     private val conversationalAIAPIEventHandler = object : IConversationalAIAPIEventHandler {
         @Suppress("DEPRECATION")
-        override fun onAgentStateChanged(agentUserId: String, event: StateChangeEvent) {}
+        override fun onAgentStateChanged(agentUserId: String, event: StateChangeEvent) {
+        }
 
         override fun onAgentListeningChanged(agentUserId: String, isListening: Boolean) {
             isAgentListening = isListening
@@ -814,19 +820,25 @@ class AgentChatViewModel : ViewModel() {
         publishManualTurn(ManualTurnDemoUi.Action.EOS)
     }
 
-    fun sendTextMessage(text: String): Boolean {
+    fun sendTextMessage(
+        text: String,
+        priority: Priority,
+        responseInterruptable: Boolean
+    ): Boolean {
         val content = text.trim()
         if (content.isEmpty()) {
             addStatusLog("Send text failed error=Text is empty")
             return false
         }
+        val options = "priority=${priority.name}, responseInterruptable=$responseInterruptable"
         return sendChatMessage(
             label = "Text",
             message = TextMessage(
-                priority = Priority.INTERRUPT,
-                responseInterruptable = true,
+                priority = priority,
+                responseInterruptable = responseInterruptable,
                 text = content
-            )
+            ),
+            options = options
         )
     }
 
@@ -849,6 +861,75 @@ class AgentChatViewModel : ViewModel() {
         )
     }
 
+    fun sendSpeakMessage(text: String, priority: Priority, interruptable: Boolean): Boolean {
+        val content = text.trim()
+        if (content.isEmpty()) {
+            addStatusLog("Send Speak failed error=Text is empty")
+            return false
+        }
+        val api = requireConnectedConversationalAIAPI("Send Speak") ?: return false
+        val currentAgentUid = requireAgentUid("Send Speak") ?: return false
+        val options = "priority=${priority.name}, interruptable=$interruptable"
+        api.speak(
+            currentAgentUid,
+            SpeakMessage(
+                text = content,
+                priority = priority,
+                interruptable = interruptable
+            )
+        ) { error ->
+            if (error != null) {
+                addStatusLog("Send Speak failed $options error=${error.errorMessage}")
+            } else {
+                addStatusLog("Send Speak successfully $options")
+            }
+        }
+        return true
+    }
+
+    fun sendThinkMessage(
+        text: String,
+        onListeningAction: ThinkListeningAction,
+        onThinkingAction: ThinkThinkingAction,
+        onSpeakingAction: ThinkSpeakingAction,
+        interruptable: Boolean,
+        includeMetadata: Boolean
+    ): Boolean {
+        val content = text.trim()
+        if (content.isEmpty()) {
+            addStatusLog("Send Think failed error=Text is empty")
+            return false
+        }
+        val api = requireConnectedConversationalAIAPI("Send Think") ?: return false
+        val currentAgentUid = requireAgentUid("Send Think") ?: return false
+        val options = "listening=${onListeningAction.name}, " +
+                "thinking=${onThinkingAction.name}, " +
+                "speaking=${onSpeakingAction.name}, " +
+                "interruptable=$interruptable, metadata=$includeMetadata"
+        api.think(
+            currentAgentUid,
+            ThinkMessage(
+                text = content,
+                onListeningAction = onListeningAction,
+                onThinkingAction = onThinkingAction,
+                onSpeakingAction = onSpeakingAction,
+                interruptable = interruptable,
+                metadata = if (includeMetadata) {
+                    mapOf("source" to "kotlin_demo")
+                } else {
+                    null
+                }
+            )
+        ) { error ->
+            if (error != null) {
+                addStatusLog("Send Think failed $options error=${error.errorMessage}")
+            } else {
+                addStatusLog("Send Think successfully $options")
+            }
+        }
+        return true
+    }
+
     fun sendInterrupt() {
         val api = requireConnectedConversationalAIAPI("Interrupt") ?: return
         val currentAgentUid = requireAgentUid("Interrupt") ?: return
@@ -861,14 +942,19 @@ class AgentChatViewModel : ViewModel() {
         }
     }
 
-    private fun sendChatMessage(label: String, message: ChatMessage): Boolean {
+    private fun sendChatMessage(
+        label: String,
+        message: ChatMessage,
+        options: String? = null
+    ): Boolean {
         val api = requireConnectedConversationalAIAPI("Send $label") ?: return false
         val currentAgentUid = requireAgentUid("Send $label") ?: return false
+        val optionSuffix = options?.let { " $it" }.orEmpty()
         api.chat(currentAgentUid, message) { error ->
             if (error != null) {
-                addStatusLog("Send $label failed error=${error.errorMessage}")
+                addStatusLog("Send $label failed$optionSuffix error=${error.errorMessage}")
             } else {
-                addStatusLog("Send $label successfully")
+                addStatusLog("Send $label successfully$optionSuffix")
             }
         }
         return true

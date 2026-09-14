@@ -51,7 +51,7 @@ Android owns:
 - RTC join/audio publish/audio subscribe
 - RTM login and message subscription
 - toolkit callbacks for Agent state, transcript, metrics, and errors
-- mute, interrupt, text/image chat, and manual SOS/EOS controls
+- mute, interrupt, text/image chat, speak/think validation, and manual SOS/EOS controls
 - immediate local cleanup on startup failure or hangup
 
 Python owns:
@@ -88,6 +88,11 @@ Agent startup is gated by all of:
 - RTM logged in
 - toolkit message subscription succeeded
 - returned user UID and agent UID available
+
+After startup, Text, Image, Speak, Think, Interrupt, and manual SOS/EOS requests
+are published through RTM directly to the agent user ID. Speak uses
+`assistant.transcription`; Think uses `user.transcription`. These message APIs
+do not call the Python backend.
 - startup SOS/EOS modes fixed
 
 `/startAgent` acceptance does not fabricate Agent state. Live state,

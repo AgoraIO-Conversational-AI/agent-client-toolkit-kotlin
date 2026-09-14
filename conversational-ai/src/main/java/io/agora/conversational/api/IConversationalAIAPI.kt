@@ -4,7 +4,7 @@ import io.agora.rtc2.Constants
 import io.agora.rtc2.RtcEngine
 import io.agora.rtm.RtmClient
 
-const val ConversationalAIAPI_VERSION = "2.9.0"
+const val ConversationalAIAPI_VERSION = "2.10.0"
 
 /*
  * This file defines the core interfaces, data structures, and error system for the Conversational AI API.
@@ -46,6 +46,76 @@ enum class Priority {
      */
     IGNORE
 }
+
+/**
+ * Action to take when a think instruction arrives while the agent is listening.
+ * [INTERRUPT] is the default action.
+ */
+enum class ThinkListeningAction(val value: String) {
+    INJECT("inject"),
+    INTERRUPT("interrupt"),
+    IGNORE("ignore"),
+    APPEND("append")
+}
+
+/**
+ * Action to take when a think instruction arrives while the agent is thinking.
+ * [IGNORE] is the default action.
+ */
+enum class ThinkThinkingAction(val value: String) {
+    INTERRUPT("interrupt"),
+    IGNORE("ignore"),
+    APPEND("append")
+}
+
+/**
+ * Action to take when a think instruction arrives while the agent is speaking.
+ * [IGNORE] is the default action.
+ */
+enum class ThinkSpeakingAction(val value: String) {
+    INTERRUPT("interrupt"),
+    IGNORE("ignore"),
+    APPEND("append")
+}
+
+/**
+ * A message that the agent broadcasts directly without LLM processing.
+ *
+ * @property text Text to synthesize and broadcast through the agent's TTS pipeline.
+ * @property priority How the agent handles this request relative to the current interaction.
+ * Defaults to [Priority.INTERRUPT].
+ * @property interruptable Whether user speech can interrupt the synthesized speech generated
+ * for this request. Defaults to `true`.
+ */
+data class SpeakMessage(
+    val text: String,
+    val priority: Priority = Priority.INTERRUPT,
+    val interruptable: Boolean = true,
+)
+
+/**
+ * An instruction that the agent processes as input to the LLM.
+ *
+ * @property text Instruction text injected into the conversation as user input.
+ * @property onListeningAction Action to take when the agent is listening. Defaults to
+ * [ThinkListeningAction.INTERRUPT].
+ * @property onThinkingAction Action to take when the agent is thinking. Defaults to
+ * [ThinkThinkingAction.IGNORE].
+ * @property onSpeakingAction Action to take when the agent is speaking. Defaults to
+ * [ThinkSpeakingAction.IGNORE].
+ * @property interruptable Whether user speech can interrupt the response generated for this
+ * instruction. Defaults to `true`.
+ * @property metadata Optional caller-supplied business identifiers or other string key-value
+ * data. `null` omits the field from the RTM payload.
+ */
+data class ThinkMessage(
+    val text: String,
+    val onListeningAction: ThinkListeningAction = ThinkListeningAction.INTERRUPT,
+    val onThinkingAction: ThinkThinkingAction = ThinkThinkingAction.IGNORE,
+    val onSpeakingAction: ThinkSpeakingAction = ThinkSpeakingAction.IGNORE,
+    val interruptable: Boolean = true,
+    val metadata: Map<String, String>? = null,
+)
 
 /**
  * Base sealed class for all message types sent to AI agents.
@@ -889,6 +959,24 @@ interface IConversationalAIAPI {
         message: ChatMessage,
         completion: (error: ConversationalAIAPIError?) -> Unit
     )
+
+    /**
+     * Broadcast a message directly through the agent's TTS pipeline.
+     *
+     * @param agentUserId Agent user ID
+     * @param message Message and broadcast behavior
+     * @param completion Callback, error is null when RTM publish succeeds
+     */
+    fun speak(agentUserId: String, message: SpeakMessage, completion: (error: ConversationalAIAPIError?) -> Unit)
+
+    /**
+     * Send an instruction for the agent to process through the LLM pipeline.
+     *
+     * @param agentUserId Agent user ID
+     * @param message Instruction and per-state behavior
+     * @param completion Callback, error is null when RTM publish succeeds
+     */
+    fun think(agentUserId: String, message: ThinkMessage, completion: (error: ConversationalAIAPIError?) -> Unit)
 
     /**
      * Interrupt the AI agent's speaking.

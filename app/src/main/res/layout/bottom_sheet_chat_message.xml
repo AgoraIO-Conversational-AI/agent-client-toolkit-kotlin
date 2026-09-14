@@ -1,83 +1,287 @@
 <?xml version="1.0" encoding="utf-8"?>
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<androidx.core.widget.NestedScrollView xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
     android:background="@drawable/bg_bottom_sheet"
-    android:orientation="vertical"
-    android:paddingHorizontal="12dp"
-    android:paddingVertical="16dp">
+    android:fillViewport="true">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:paddingHorizontal="12dp"
+        android:paddingVertical="16dp">
 
     <LinearLayout
         android:id="@+id/llChatHeader"
         android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="36dp"
+            android:orientation="horizontal">
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnChatModeText"
+                style="@style/Widget.MaterialComponents.Button.TextButton"
+                android:layout_width="0dp"
+                android:layout_height="36dp"
+                android:layout_weight="1"
+                android:background="@drawable/selector_chat_mode_selected"
+                android:letterSpacing="0"
+                android:minWidth="0dp"
+                android:paddingHorizontal="4dp"
+                android:text="Text"
+                android:textAllCaps="false"
+                android:textColor="@color/white"
+                android:textSize="12sp"
+                app:backgroundTint="@null"
+                app:cornerRadius="8dp"
+                app:elevation="0dp"
+                app:icon="@drawable/ic_message_text"
+                app:iconGravity="textStart"
+                app:iconPadding="3dp"
+                app:iconSize="13dp"
+                app:iconTint="@color/white" />
+
+            <Space
+                android:layout_width="6dp"
+                android:layout_height="1dp" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnChatModeImage"
+                style="@style/Widget.MaterialComponents.Button.TextButton"
+                android:layout_width="0dp"
+                android:layout_height="36dp"
+                android:layout_weight="1"
+                android:background="@drawable/selector_chat_mode_unselected"
+                android:letterSpacing="0"
+                android:minWidth="0dp"
+                android:paddingHorizontal="4dp"
+                android:text="Image"
+                android:textAllCaps="false"
+                android:textColor="@color/text_subtitle"
+                android:textSize="12sp"
+                app:backgroundTint="@null"
+                app:cornerRadius="8dp"
+                app:elevation="0dp"
+                app:icon="@drawable/ic_image"
+                app:iconGravity="textStart"
+                app:iconPadding="3dp"
+                app:iconSize="13dp"
+                app:iconTint="@color/text_subtitle" />
+
+            <Space
+                android:layout_width="6dp"
+                android:layout_height="1dp" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnChatModeSpeak"
+                style="@style/Widget.MaterialComponents.Button.TextButton"
+                android:layout_width="0dp"
+                android:layout_height="36dp"
+                android:layout_weight="1"
+                android:background="@drawable/selector_chat_mode_unselected"
+                android:letterSpacing="0"
+                android:minWidth="0dp"
+                android:paddingHorizontal="4dp"
+                android:text="Speak"
+                android:textAllCaps="false"
+                android:textColor="@color/text_subtitle"
+                android:textSize="12sp"
+                app:backgroundTint="@null"
+                app:cornerRadius="8dp"
+                app:elevation="0dp"
+                app:icon="@drawable/ic_message_text"
+                app:iconGravity="textStart"
+                app:iconPadding="3dp"
+                app:iconSize="13dp"
+                app:iconTint="@color/text_subtitle" />
+
+            <Space
+                android:layout_width="6dp"
+                android:layout_height="1dp" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnChatModeThink"
+                style="@style/Widget.MaterialComponents.Button.TextButton"
+                android:layout_width="0dp"
+                android:layout_height="36dp"
+                android:layout_weight="1"
+                android:background="@drawable/selector_chat_mode_unselected"
+                android:letterSpacing="0"
+                android:minWidth="0dp"
+                android:paddingHorizontal="4dp"
+                android:text="Think"
+                android:textAllCaps="false"
+                android:textColor="@color/text_subtitle"
+                android:textSize="12sp"
+                app:backgroundTint="@null"
+                app:cornerRadius="8dp"
+                app:elevation="0dp"
+                app:icon="@drawable/ic_message_text"
+                app:iconGravity="textStart"
+                app:iconPadding="3dp"
+                app:iconSize="13dp"
+                app:iconTint="@color/text_subtitle" />
+        </LinearLayout>
+    </LinearLayout>
+
+    <LinearLayout
+        android:id="@+id/rowMessagePriority"
+        android:layout_width="match_parent"
         android:layout_height="44dp"
+        android:layout_marginTop="12dp"
         android:gravity="center_vertical"
-        android:orientation="horizontal">
+        android:orientation="horizontal"
+        android:visibility="gone"
+        tools:visibility="visible">
 
         <TextView
-            android:id="@+id/tvChatSheetTitle"
-            android:layout_width="wrap_content"
+            android:layout_width="0dp"
             android:layout_height="wrap_content"
-            android:text="Chat"
-            android:textColor="@color/text_title"
-            android:textSize="16sp"
-            android:textStyle="bold" />
+            android:layout_weight="1"
+            android:text="Priority"
+            android:textColor="@color/text_primary"
+            android:textSize="13sp" />
 
-        <Space
-            android:layout_width="12dp"
-            android:layout_height="1dp" />
+        <androidx.appcompat.widget.AppCompatSpinner
+            android:id="@+id/spinnerMessagePriority"
+            android:layout_width="160dp"
+            android:layout_height="44dp"
+            android:background="@drawable/bg_message_input"
+            android:paddingHorizontal="10dp" />
+    </LinearLayout>
 
-        <com.google.android.material.button.MaterialButton
-            android:id="@+id/btnChatModeText"
-            android:layout_width="82dp"
-            android:layout_height="36dp"
-            android:background="@drawable/selector_chat_mode_selected"
-            android:letterSpacing="0"
-            android:minWidth="0dp"
-            android:paddingStart="10dp"
-            android:paddingEnd="10dp"
-            android:text="Text"
-            android:textAllCaps="false"
-            android:textColor="@color/white"
-            android:textSize="12sp"
-            app:backgroundTint="@null"
-            app:cornerRadius="8dp"
-            app:elevation="0dp"
-            app:icon="@drawable/ic_message_text"
-            app:iconGravity="textStart"
-            app:iconPadding="4dp"
-            app:iconSize="14dp"
-            app:iconTint="@color/white"
-            app:rippleColor="#33FFFFFF" />
+    <LinearLayout
+        android:id="@+id/llThinkOptions"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="12dp"
+        android:orientation="vertical"
+        android:visibility="gone"
+        tools:visibility="visible">
 
-        <Space
-            android:layout_width="8dp"
-            android:layout_height="1dp" />
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="44dp"
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
 
-        <com.google.android.material.button.MaterialButton
-            android:id="@+id/btnChatModeImage"
-            android:layout_width="120dp"
-            android:layout_height="36dp"
-            android:background="@drawable/selector_chat_mode_unselected"
-            android:letterSpacing="0"
-            android:minWidth="0dp"
-            android:paddingStart="10dp"
-            android:paddingEnd="10dp"
-            android:text="Image URL"
-            android:textAllCaps="false"
-            android:textColor="@color/text_subtitle"
-            android:textSize="12sp"
-            app:backgroundTint="@null"
-            app:cornerRadius="8dp"
-            app:elevation="0dp"
-            app:icon="@drawable/ic_image"
-            app:iconGravity="textStart"
-            app:iconPadding="4dp"
-            app:iconSize="14dp"
-            app:iconTint="@color/text_subtitle"
-            app:rippleColor="#33FFFFFF" />
+            <TextView
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="While listening"
+                android:textColor="@color/text_primary"
+                android:textSize="13sp" />
+
+            <androidx.appcompat.widget.AppCompatSpinner
+                android:id="@+id/spinnerThinkListening"
+                android:layout_width="160dp"
+                android:layout_height="44dp"
+                android:background="@drawable/bg_message_input"
+                android:paddingHorizontal="10dp" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="44dp"
+            android:layout_marginTop="6dp"
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
+
+            <TextView
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="While thinking"
+                android:textColor="@color/text_primary"
+                android:textSize="13sp" />
+
+            <androidx.appcompat.widget.AppCompatSpinner
+                android:id="@+id/spinnerThinkThinking"
+                android:layout_width="160dp"
+                android:layout_height="44dp"
+                android:background="@drawable/bg_message_input"
+                android:paddingHorizontal="10dp" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="44dp"
+            android:layout_marginTop="6dp"
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
+
+            <TextView
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="While speaking"
+                android:textColor="@color/text_primary"
+                android:textSize="13sp" />
+
+            <androidx.appcompat.widget.AppCompatSpinner
+                android:id="@+id/spinnerThinkSpeaking"
+                android:layout_width="160dp"
+                android:layout_height="44dp"
+                android:background="@drawable/bg_message_input"
+                android:paddingHorizontal="10dp" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="44dp"
+            android:layout_marginTop="6dp"
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
+
+            <TextView
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="Include demo metadata"
+                android:textColor="@color/text_primary"
+                android:textSize="13sp" />
+
+            <com.google.android.material.switchmaterial.SwitchMaterial
+                android:id="@+id/switchThinkMetadata"
+                android:layout_width="wrap_content"
+                android:layout_height="44dp"
+                android:minWidth="48dp"
+                android:showText="false" />
+        </LinearLayout>
+    </LinearLayout>
+
+    <LinearLayout
+        android:id="@+id/rowMessageInterruptable"
+        android:layout_width="match_parent"
+        android:layout_height="44dp"
+        android:layout_marginTop="6dp"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:visibility="gone"
+        tools:visibility="visible">
+
+        <TextView
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="Interruptable"
+            android:textColor="@color/text_primary"
+            android:textSize="13sp" />
+
+        <com.google.android.material.switchmaterial.SwitchMaterial
+            android:id="@+id/switchMessageInterruptable"
+            android:layout_width="wrap_content"
+            android:layout_height="44dp"
+            android:minWidth="48dp"
+            android:showText="false" />
     </LinearLayout>
 
     <LinearLayout
@@ -127,4 +331,5 @@
             app:elevation="0dp"
             app:rippleColor="#33FFFFFF" />
     </LinearLayout>
-</LinearLayout>
+    </LinearLayout>
+</androidx.core.widget.NestedScrollView>
