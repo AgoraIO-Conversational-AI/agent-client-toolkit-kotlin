@@ -264,7 +264,8 @@ Follow the canonical checklist in [docs/publishing.md](./docs/publishing.md).
 Keep the explicit Gradle release version and `ConversationalAIAPI_VERSION`
 aligned, and update the changelog and affected README examples. Merge the
 release PR into `main` and verify that commit's CI before tagging `vX.Y.Z`.
-Tags and manual CI runs validate sources; they do not publish Maven artifacts
+Stable `vX.Y.Z` tag runs build Maven input artifacts after source checks pass;
+manual and branch runs validate sources only. CI does not publish Maven packages
 or create GitHub Releases. Validate the exact published dependency in a clean
 consumer app and never move a release tag or overwrite a published version.
 
