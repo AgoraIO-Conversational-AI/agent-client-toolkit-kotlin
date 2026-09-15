@@ -13,7 +13,7 @@ def rehoboamGroupId = findProperty("REHOBOAM_GROUP_ID") ?: System.getenv("REHOBO
 def consumerMinCompileSdk = (findProperty("CONVOAI_API_MIN_COMPILE_SDK") ?: System.getenv("CONVOAI_API_MIN_COMPILE_SDK") ?: rootProject.ext.minSdkVersion).toString().toInteger()
 
 group = publishedGroupId
-version = findProperty("VERSION") ?: System.getenv("VERSION") ?: "0.1.0-SNAPSHOT"
+version = findProperty("VERSION") ?: System.getenv("VERSION") ?: "2.10.1"
 
 android {
     namespace = 'io.agora.agents.toolkit'
@@ -169,6 +169,7 @@ dependencies {
 
     testImplementation libs.junit
     testImplementation libs.json
+    testCompileOnly libs.agora.rtc.full
     androidTestImplementation libs.androidx.junit
     androidTestImplementation libs.androidx.espresso.core
 }

@@ -11,7 +11,8 @@ in private maintainer documentation.
 - The Maven coordinate is `io.agora.agents:agora-agent-client-toolkit:X.Y.Z`.
 - [CI](../.github/workflows/ci.yml) runs for PRs targeting `main`, pushes to
   `main`, manual dispatch, and tags matched by `*` (names without `/`, including
-  `vX.Y.Z`). These runs test and build sources; they do not publish Maven
+  `vX.Y.Z`). Stable `vX.Y.Z` tag runs also build downloadable Maven release
+  input artifacts after the source checks pass. They do not publish Maven
   packages or create GitHub Releases.
 - [Docker checks](../.github/workflows/docker.yml) run on PRs only.
 
@@ -40,10 +41,11 @@ If a published release needs a fix, prepare a new version.
 
    The publication version resolves from Gradle `-PVERSION`, then the
    `VERSION` environment variable, then the build file's fallback. Always
-   pass `-PVERSION=X.Y.Z` for release builds. A tag does not set either version
-   automatically, and overriding Gradle's version does not update the SDK
-   constant. The demo's `versionName` / `versionCode` are independent of the
-   SDK version.
+   pass `-PVERSION=X.Y.Z` for direct Gradle release builds. The CI artifact job
+   derives this value from `vX.Y.Z` and first verifies both the build file's
+   fallback and SDK constant match. Overriding Gradle's version does not update
+   the SDK constant. The demo's `versionName` / `versionCode` are independent
+   of the SDK version.
 
 3. Add a dated entry to [CHANGELOG.md](../CHANGELOG.md) and update affected
    examples in the root README, `conversational-ai/README.md`, and the
@@ -91,12 +93,34 @@ git tag vX.Y.Z
 git push upstream refs/tags/vX.Y.Z
 ```
 
-Wait for that tag's CI to pass. Build release artifacts from the tagged commit
-in a clean checkout, passing the same explicit version. Publication is a
-separate maintainer operation; a successful tag run alone does not mean that
-the Maven package is available.
+Wait for that tag's CI, including `release-artifacts`, to pass. Download
+`toolkit-maven-X.Y.Z` from the workflow run's Artifacts section. It contains
+the Maven input zip, `manifest.json` with the source tag/commit and Java
+version, and `SHA256SUMS`. Artifacts are retained for 30 days; archive the
+validated inputs in the release storage before they expire. The Actions
+download wraps these files in an outer zip: extract it to obtain the input
+zip for the maintainer publishing process.
+
+The artifact job uses JDK 21 and Android SDK 36, validates all four archive
+entries and Maven coordinates, and only runs after the backend and Android
+source checks pass. Non-tag and manual source runs do not build release inputs.
+Publication remains a separate maintainer operation; a successful tag run
+does not mean the Maven package is available. Actions artifact download links
+are not public package URLs.
 
 ## Build and Inspect the Maven Artifacts
+
+To reproduce the CI packaging step in a clean source checkout, with Java and
+the Android SDK installed:
+
+```bash
+python3 scripts/build_release_artifacts.py vX.Y.Z
+```
+
+The script validates the stable tag name and source versions, builds the
+input archive, and writes the release files under `build/release/X.Y.Z/`.
+It does not create or push the supplied tag. Use `--check` to validate versions
+without building. Prerelease tags and version mismatches fail before packaging.
 
 From the validated source checkout, the standard Gradle publication tasks
 produce the AAR, POM, sources, and documentation archives without uploading:

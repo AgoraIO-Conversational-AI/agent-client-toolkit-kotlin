@@ -22,6 +22,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Test release tooling
+        run: python3 -m unittest discover -s scripts/tests
+        working-directory: .
+
       - uses: astral-sh/setup-uv@v5
 
       - name: Install backend dependencies
@@ -58,3 +62,43 @@ jobs:
 
       - name: Lint and build demo
         run: ./gradlew :conversational-ai:lintDebug :app:lintDebug :app:assembleDebug
+
+  release-artifacts:
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    needs: [server, android]
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate release tag and versions
+        id: release
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          version=$(python3 scripts/build_release_artifacts.py "$RELEASE_TAG" --check)
+          printf 'version=%s\n' "$version" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: "platform-tools platforms;android-36"
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Build and inspect Maven release archive
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: python3 scripts/build_release_artifacts.py "$RELEASE_TAG"
+
+      - name: Upload release artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: toolkit-maven-${{ steps.release.outputs.version }}
+          path: build/release/${{ steps.release.outputs.version }}/
+          if-no-files-found: error
+          retention-days: 30
