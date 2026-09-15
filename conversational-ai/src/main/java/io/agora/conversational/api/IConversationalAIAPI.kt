@@ -4,7 +4,7 @@ import io.agora.rtc2.Constants
 import io.agora.rtc2.RtcEngine
 import io.agora.rtm.RtmClient
 
-const val ConversationalAIAPI_VERSION = "2.10.0"
+const val ConversationalAIAPI_VERSION = "2.10.1"
 
 /*
  * This file defines the core interfaces, data structures, and error system for the Conversational AI API.
@@ -1021,6 +1021,7 @@ interface IConversationalAIAPI {
 
     /**
      * Set audio parameters for optimal AI conversation performance.
+     * Disables on-device AINS. To enable it, use the overload with enableAins = true.
      *
      * WARNING: This method MUST be called BEFORE rtcEngine.joinChannel().
      * If you do not call loadAudioSettings before joining the RTC channel, the audio quality for AI conversation may be suboptimal or incorrect.
@@ -1042,6 +1043,22 @@ interface IConversationalAIAPI {
      * rtcEngine.joinChannel(token, channelName, null, userId)
      */
     fun loadAudioSettings(scenario: Int = Constants.AUDIO_SCENARIO_AI_CLIENT)
+
+    /**
+     * Set audio parameters with caller-controlled on-device AINS.
+     * The selected AINS value is retained when audio route settings are reapplied.
+     * Calling either overload without enableAins disables AINS again.
+     *
+     * Must be called before each rtcEngine.joinChannel() call.
+     *
+     * @param scenario Audio scenario, defaults to AUDIO_SCENARIO_AI_CLIENT.
+     *                 Use AUDIO_SCENARIO_DEFAULT for Avatar mode.
+     * @param enableAins Whether to enable on-device AINS. Defaults to false.
+     */
+    fun loadAudioSettings(
+        scenario: Int = Constants.AUDIO_SCENARIO_AI_CLIENT,
+        enableAins: Boolean = false
+    )
 
     /**
      * Destroy the API instance and release resources. After calling, this instance cannot be used again.

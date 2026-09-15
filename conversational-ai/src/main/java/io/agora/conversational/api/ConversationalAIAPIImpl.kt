@@ -178,6 +178,7 @@ class ConversationalAIAPIImpl(val config: ConversationalAIAPIConfig) : IConversa
     }
 
     private var audioRouting = Constants.AUDIO_ROUTE_DEFAULT
+    private var enableAins = false
 
     private val stateChangeEvents = ConcurrentHashMap<String, StateChangeEvent>()
 
@@ -994,7 +995,12 @@ class ConversationalAIAPIImpl(val config: ConversationalAIAPIConfig) : IConversa
     }
 
     override fun loadAudioSettings(scenario: Int) {
-        callMessagePrint(TAG, ">>> [loadAudioSettings] scenario:$scenario")
+        loadAudioSettings(scenario, enableAins = false)
+    }
+
+    override fun loadAudioSettings(scenario: Int, enableAins: Boolean) {
+        callMessagePrint(TAG, ">>> [loadAudioSettings] scenario:$scenario enableAins:$enableAins")
+        this.enableAins = enableAins
         config.rtcEngine.setAudioScenario(scenario)
         setAudioConfigParameters(audioRouting)
     }
@@ -1130,7 +1136,7 @@ class ConversationalAIAPIImpl(val config: ConversationalAIAPIConfig) : IConversa
         audioRouting = routing
         config.rtcEngine.apply {
             setParameters("{\"che.audio.aec.split_srate_for_48k\":16000}")
-            setParameters("{\"che.audio.sf.enabled\":true}")
+            setParameters("{\"che.audio.sf.enabled\":$enableAins}")
             setParameters("{\"che.audio.sf.stftType\":6}")
             setParameters("{\"che.audio.sf.ainlpLowLatencyFlag\":1}")
             setParameters("{\"che.audio.sf.ainsLowLatencyFlag\":1}")

@@ -148,10 +148,16 @@ fun interrupt(agentUserId: String, completion: (ConversationalAIAPIError?) -> Un
 fun manualSOS(agentUserId: String, completion: (String, ConversationalAIAPIError?) -> Unit)
 fun manualEOS(agentUserId: String, completion: (String, ConversationalAIAPIError?) -> Unit)
 fun loadAudioSettings(scenario: Int = Constants.AUDIO_SCENARIO_AI_CLIENT)
+fun loadAudioSettings(scenario: Int = Constants.AUDIO_SCENARIO_AI_CLIENT, enableAins: Boolean = false)
 fun destroy()
 ```
 
 `loadAudioSettings()` must be called before every `RtcEngine.joinChannel()` call.
+
+Starting with 2.10.1, Toolkit audio settings disable on-device AINS by default.
+Pass `enableAins = true` to enable it. Toolkit retains the selected value when
+audio settings are reapplied after a route change. Calling `loadAudioSettings`
+without `enableAins`, or passing `false`, disables it again.
 
 For Avatar mode, use:
 
@@ -164,6 +170,18 @@ For standard voice mode, use:
 ```kotlin
 conversationalAIAPI.loadAudioSettings(Constants.AUDIO_SCENARIO_AI_CLIENT)
 ```
+
+To control AINS from your application, pass its setting before joining:
+
+```kotlin
+conversationalAIAPI.loadAudioSettings(
+    scenario = Constants.AUDIO_SCENARIO_AI_CLIENT,
+    enableAins = ainsEnabled // Your application's Boolean setting; false by default.
+)
+```
+
+Update AINS through Toolkit so subsequent audio route changes use the same
+value. Direct RTC parameter writes do not update Toolkit's stored setting.
 
 ## Events
 

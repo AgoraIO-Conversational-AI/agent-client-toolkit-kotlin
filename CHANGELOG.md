@@ -4,6 +4,14 @@ All notable changes to the Android Agora Conversational AI Toolkit will be docum
 
 The format follows Keep a Changelog style. This first public release establishes the compatibility baseline for future Android releases.
 
+## [2.10.1] - Unreleased
+
+### Changed
+
+- Defaulted on-device AINS to disabled in `loadAudioSettings`. Applications can
+  explicitly enable it with `enableAins = true`; audio route changes retain the
+  selected value. Existing calls remain supported and disable AINS.
+
 ## [2.10.0] - 2026-08-13
 
 ### Added
