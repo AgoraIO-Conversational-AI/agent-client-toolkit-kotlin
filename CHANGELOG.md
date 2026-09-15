@@ -34,7 +34,7 @@ Initial public release.
 - Added text and image message publishing through `chat(...)` with `TextMessage` and `ImageMessage`.
 - Added direct conversation control APIs: `interrupt(...)`, `manualSOS(...)`, and `manualEOS(...)`.
 - Added manual turn result callbacks: `onUserManualSosEvent(...)`, `onUserManualEosEvent(...)`, and `onAgentManualEosEvent(...)`.
-- Added maintainer packaging support for Rehoboam Maven / AAR upload input zips.
+- Added maintainer packaging support for Maven / AAR release bundles.
 
 ### Compatibility
 

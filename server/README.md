@@ -4,6 +4,25 @@ This FastAPI service keeps Agora credentials and agent lifecycle operations out
 of the Android APK. It uses `agora-agents==2.4.1` with explicit Agora Fengming
 STT plus managed OpenAI LLM and MiniMax TTS.
 
+## Access Boundary
+
+This is a development backend. `/get_config`, `/startAgent`, and `/stopAgent`
+have no caller authentication or per-user authorization. A reachable caller
+can obtain user tokens and invoke agent lifecycle operations. Keeping the App
+Certificate on the server does not restrict who may call these endpoints.
+
+The physical-device helper listens on `0.0.0.0:8000` so the Android phone can
+reach the development machine over LAN. This binds all network interfaces;
+use a trusted development LAN and limit inbound access to your test devices
+with a firewall. Do not expose the service through public port forwarding or
+tunnels. Shared or production deployments need authentication, authorization,
+and abuse controls such as rate limits.
+
+For testing entirely on the development machine, use `--host 127.0.0.1`.
+Likewise, a Docker container used only from that machine can publish its port
+with `-p 127.0.0.1:8000:8000`. A physical phone needs the development machine's
+LAN address; it cannot reach a service bound only to the machine's loopback.
+
 ## Configure
 
 ```bash

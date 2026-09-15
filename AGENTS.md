@@ -251,64 +251,26 @@ Python tests, and all contract documents synchronized.
 
 1. **Server-only credentials**: App Certificate and provider credentials must never be added to Android resources, BuildConfig, logs, or source.
 2. **Backend ownership**: Android must not build `/join` payloads or call Agora agent REST endpoints directly.
-3. **Local demo**: The bundled FastAPI service is a local quickstart backend, not a production deployment design.
+3. **Local demo**: The bundled FastAPI service is a local quickstart backend, not a production deployment design. Its token and agent lifecycle endpoints have no caller authentication. Restrict access to trusted development devices on the LAN; shared or public deployment requires authentication, authorization, and abuse controls. See [server/README.md](./server/README.md#access-boundary).
 4. **Token lifetime**: The local demo issues 24-hour user tokens and does not implement in-session renewal. Production integrations must add RTC/RTM renewal.
 5. **Resource Cleanup**: Session side effects are cleared in `hangup()` and `onCleared()`; both paths best-effort stop known backend sessions, late start responses are stopped outside the cancelled ViewModel scope, and every Toolkit, RTM client, and RTC engine is destroyed before the next session
 6. **Permissions**: Requires `RECORD_AUDIO` and `INTERNET` permissions
 7. **ConversationalAIAPI module boundary**: Files under `:conversational-ai` (`conversational-ai/src/main/java/io/agora/conversational/api/`) are reusable toolkit components packaged for Maven / AAR release. Keep the public API minimal and update `conversational-ai/README.md` when the API changes. The sample app depends on it via `implementation(project(":conversational-ai"))`.
 8. **Audio Settings**: `loadAudioSettings()` must be called before `joinChannel()`; Avatar mode uses `AUDIO_SCENARIO_DEFAULT`
 
-## Internal Maven Release
+## Releases
 
-Rehoboam is the internal Maven / AAR release platform. Do not document Rehoboam, Jenkins download URLs, or internal release requests in public-facing README files.
+Follow the canonical checklist in [docs/publishing.md](./docs/publishing.md).
+Keep the explicit Gradle release version and `ConversationalAIAPI_VERSION`
+aligned, and update the changelog and affected README examples. Merge the
+release PR into `main` and verify that commit's CI before tagging `vX.Y.Z`.
+Tags and manual CI runs validate sources; they do not publish Maven artifacts
+or create GitHub Releases. Validate the exact published dependency in a clean
+consumer app and never move a release tag or overwrite a published version.
 
-The public `conversational-ai/README.md` should describe developer-facing API usage only.
-
-Release strategy:
-
-- Do not publish release candidates. Only formal SemVer versions are allowed.
-- Validate the formal package through staging / platform validation plus sample or clean-app consumption before publishing.
-- If a problem is found after the final version is published, do not overwrite or delete that version; publish a new version such as `2.9.1`.
-
-To prepare the Rehoboam upload zip:
-
-```bash
-VERSION=<version> scripts/build_rehoboam_maven_input_zip.sh
-```
-
-Replace `<version>` with the version being released. The script accepts only
-formal SemVer versions.
-
-The generated zip is:
-
-```text
-conversational-ai/build/distributions/agora-agent-client-toolkit-<version>-maven-rehoboam-input.zip
-```
-
-The zip contains:
-
-```text
-agora-agent-client-toolkit/
-├── agora-agent-client-toolkit-<version>.pom
-├── agora-agent-client-toolkit-<version>.aar
-├── agora-agent-client-toolkit-<version>-sources.jar
-└── agora-agent-client-toolkit-<version>-javadoc.jar
-```
-
-Rehoboam form values for this single-AAR module:
-
-| Field | Value |
-|-------|-------|
-| `Release Channel` | `Maven / AAR` |
-| `Group ID` | `io.agora.agents` |
-| `Artifacts Version` | Same as the explicit `VERSION` passed to `scripts/build_rehoboam_maven_input_zip.sh` |
-| `File Link / File URL` | Jenkins-accessible URL for the generated zip |
-| `Part Release List / SO_LIST` | Empty for full release |
-| `Subspec Publish` | Off |
-
-Rehoboam uses the POM `groupId` as an Android manifest package in its `aar-template` validation flow, so the group ID must be a valid Java package name. Keep the public Maven coordinate in `conversational-ai/README.md` as `io.agora.agents:agora-agent-client-toolkit`.
-
-This project does not need `.target` files unless it is changed into Rehoboam multi-module target publishing.
+All tracked documents, including this file, are public. Keep internal
+publishing service details, private URLs, and operational instructions in private
+maintainer documentation.
 
 ## File Naming
 
@@ -323,3 +285,4 @@ This project does not need `.target` files unless it is changed into Rehoboam mu
 | AGENTS.md | AI Agent development guidelines and project constraints |
 | ARCHITECTURE.md | Technical architecture details (data flows, threading, lifecycle) |
 | README.md | Quick start and usage guide |
+| `docs/publishing.md` | Version preparation, source tags, and release verification |
