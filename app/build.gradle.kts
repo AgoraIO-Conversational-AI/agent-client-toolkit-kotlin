@@ -103,7 +103,7 @@ dependencies {
 
     // Published Maven Toolkit verification: comment the local project dependency above,
     // then uncomment this line after the target version is available in the Maven repo.
-    // implementation("io.agora.agents:agora-agent-client-toolkit:2.10.1")
+    // implementation("io.agora.agents:agora-agent-client-toolkit:2.11.0")
 
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.appcompat)
