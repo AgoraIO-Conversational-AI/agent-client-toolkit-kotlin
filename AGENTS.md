@@ -11,11 +11,11 @@ This is a complete, runnable Android demo for real-time voice conversation with 
 
 The Android app does not call Agora Conversational AI REST endpoints directly.
 It calls the local FastAPI service through `AgentBackendClient`; the service
-uses `agora-agents==2.4.1` for token generation and agent lifecycle operations.
+uses `agora-agents>=2.14.0` for token generation and agent lifecycle operations.
 
 Current managed pipeline in `server/src/agent.py`:
 
-- STT: Agora Fengming, configured explicitly
+- STT: Agora Ares, matching the global service selected by `Area.US`
 - LLM: OpenAI `gpt-4o-mini`
 - TTS: MiniMax `speech_2_6_turbo` with `English_captivating_female1`
 - no third-party provider keys are required for the managed path
@@ -63,7 +63,7 @@ Current quickstart scope is limited to voice session startup, independent startu
 | RTM SDK | Agora RTM SDK (`io.agora:agora-rtm-lite:2.2.3`) |
 | Coroutines | Kotlin Coroutines 1.9.0 |
 | ConversationalAIAPI | Standalone `:conversational-ai` Gradle module |
-| Backend | Python FastAPI + `agora-agents==2.4.1` |
+| Backend | Python FastAPI + `agora-agents>=2.14.0` |
 
 For runtime structure, see `ARCHITECTURE.md`. For entry files, see `README.md`.
 

@@ -20,9 +20,13 @@ service. See [backend access guidance](./server/README.md#access-boundary).
 Prerequisites:
 
 - Python 3.10 or newer
-- Android Studio with Android SDK 36
-- an Android phone and development machine on the same LAN
+- Android Studio with Android SDK 36 and Android SDK Platform-Tools (`adb`)
+- JDK 21 for command-line Gradle builds, matching CI
+- an Android phone running Android 8.0 (API 26) or newer, on the same LAN as
+  the development machine
 - an Agora project with RTC, RTM, and Conversational AI enabled
+
+### Start The Backend
 
 Configure the backend:
 
@@ -36,7 +40,7 @@ Set `AGORA_APP_ID` and `AGORA_APP_CERTIFICATE` in `server/.env.local`, then run:
 ./scripts/start_backend.sh
 ```
 
-On first use, the script creates `server/.venv` and installs the pinned Python
+On first use, the script creates `server/.venv` and installs the required Python
 dependencies. It starts FastAPI on `0.0.0.0:8000`, detects the development
 machine's active LAN IP, waits for `/health`, and updates only this Git-ignored
 entry in the root `local.properties`:
@@ -53,14 +57,51 @@ The address is the current development machine's LAN address, not a fixed
 `192.168.1.20`. `localhost` would point to the phone itself. No USB tunnel,
 `adb reverse`, Gradle `-P` option, or in-app host setting is required.
 
-Changing the backend host does not require an active USB connection. Rebuild
-and install the app through Android Studio using either USB or wireless device
-pairing when you are ready to run it.
-
 Allow incoming Python connections in the development machine's firewall when
-prompted. Then build and run `:app` on the phone from Android Studio.
+prompted. Keep the backend terminal running while using the demo. Start the
+backend before building the app so `local.properties` contains the phone's
+reachable backend URL.
 
 Opening the printed backend URL with `/docs` shows the local API summary.
+
+### Build And Install On An Android Phone
+
+Enable **Developer options** and **USB debugging** on the phone, connect it to
+the development machine, and accept the USB debugging authorization prompt.
+Android Studio wireless device pairing is also supported.
+
+To install with Android Studio:
+
+1. Open this repository's root directory and wait for Gradle sync to finish.
+2. Select the `app` run configuration, the `debug` build variant, and your
+   connected phone as the target device.
+3. Click **Run**. Android Studio builds, installs, and launches
+   **AgentToolkit Sample** on the phone.
+
+To build and install from the command line, set `JAVA_HOME` to your JDK 21
+installation and add the Android SDK's `platform-tools` directory to `PATH`.
+Open a second terminal in this repository's root directory and run:
+
+```bash
+adb devices
+./gradlew :app:assembleDebug
+adb install -r app/build/outputs/apk/debug/app-debug.apk
+adb shell am start -n io.agora.agent.toolkit.sample/io.agora.agent.toolkit.sample.ui.AgentChatActivity
+```
+
+Before installing, confirm that `adb devices` lists the phone with status
+`device`. If it shows `unauthorized`, accept the authorization prompt on the
+phone. If multiple devices are connected, replace `adb` with
+`adb -s <device-serial>` in the install and launch commands.
+
+The debug APK is generated at `app/build/outputs/apk/debug/app-debug.apk`.
+The backend URL is compiled into `BuildConfig.AGENT_BACKEND_URL`. After the
+development machine's LAN IP or backend port changes, rerun
+`./scripts/start_backend.sh`, then rebuild and reinstall the app. Updating
+`local.properties` alone does not change an already installed app.
+
+In **AgentToolkit Sample**, tap **Start Agent**, allow microphone access when
+prompted, and wait for the connected state before speaking.
 The Android app itself contacts the backend only after **Start Agent** is
 tapped, so simply launching the Activity produces no backend request.
 
@@ -74,6 +115,10 @@ Backend details and tests are in [server/README.md](./server/README.md).
 cleanup behavior.
 
 ## Install
+
+This section describes integrating the toolkit library into an existing app.
+To install the runnable demo on a phone, see
+[Build And Install On An Android Phone](#build-and-install-on-an-android-phone).
 
 Add the Maven repositories and the Conversational AI toolkit dependency:
 

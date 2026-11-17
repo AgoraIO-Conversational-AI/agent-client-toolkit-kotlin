@@ -1,8 +1,11 @@
 # Python Backend
 
 This FastAPI service keeps Agora credentials and agent lifecycle operations out
-of the Android APK. It uses `agora-agents==2.4.1` with explicit Agora Fengming
-STT plus managed OpenAI LLM and MiniMax TTS.
+of the Android APK. It uses `agora-agents>=2.14.0` with explicit Agora Ares
+STT for the global service (`Area.US`), plus managed OpenAI LLM and MiniMax TTS.
+
+The demo uses an overseas Agora project. Keep Ares as the ASR vendor for
+`Area.US`; the Chinese mainland `fengming` vendor cannot be used with it.
 
 ## Access Boundary
 
@@ -41,7 +44,8 @@ From the repository root, use the physical-device helper:
 ./scripts/start_backend.sh
 ```
 
-It creates `server/.venv` on first use, starts FastAPI on `0.0.0.0:8000`,
+It creates `server/.venv` on first use, installs any missing or outdated
+dependencies from `server/requirements.txt`, starts FastAPI on `0.0.0.0:8000`,
 detects the development machine's LAN IP, and updates only
 `agent.backend.url` in the Git-ignored root `local.properties` after the backend
 passes its health check.

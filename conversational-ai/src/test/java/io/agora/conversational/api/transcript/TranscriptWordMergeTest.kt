@@ -134,8 +134,7 @@ class TranscriptWordMergeTest {
     }
 
     @Test
-    fun u7SameKeySpaceFirstSeenInLaterMessageIsStillDropped() {
-        // Known gap 3.10: seq 12 brings another ␠@6662 after me@6663; it has K's key and is dropped.
+    fun u7DuplicateSpaceWithSameTimestampIsDeduplicated() {
         val kept = listOf(w("Let", 6380), sp(6662), w("me", 6663))
         val incoming = listOf(w("Let", 6380), sp(6662), w("me", 6663), sp(6662), w("try", 6744))
         assertOutsideBugCondition(kept, incoming)

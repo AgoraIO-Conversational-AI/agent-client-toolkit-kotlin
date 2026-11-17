@@ -6,7 +6,9 @@ from types import SimpleNamespace
 from typing import Any
 
 import pytest
+from agora_agent import Area
 from agora_agent.agentkit import Agent
+from agora_agent.core.api_error import ApiError
 
 import src.agent as agent_module
 from src.agent import (
@@ -127,6 +129,7 @@ def test_sdk_timeout_finishes_before_mobile_timeout(
     monkeypatch.setattr(agent_module, "AsyncAgora", fake_async_agora)
     AgentService(settings)
 
+    assert captured["area"] is Area.US
     assert captured["timeout"] == SDK_REQUEST_TIMEOUT_SECONDS
     assert SDK_REQUEST_TIMEOUT_SECONDS < 30
 
@@ -218,7 +221,7 @@ def test_start_builds_managed_pipeline_and_turn_modes(
     assert properties["parameters"]["data_channel"] == "rtm"
     assert properties["parameters"]["enable_metrics"] is True
     assert properties["parameters"]["enable_error_message"] is True
-    assert properties["asr"] == {"vendor": "fengming", "language": "en-US"}
+    assert properties["asr"] == {"vendor": "ares", "language": "en-US"}
     assert "api_key" not in properties["llm"]
     assert "key" not in properties["tts"]["params"]
 
@@ -285,11 +288,27 @@ def test_stop_treats_not_found_as_idempotent(settings: BackendSettings) -> None:
     asyncio.run(service.stop_agent("expired-agent"))
 
 
+@pytest.mark.parametrize(
+    "sdk_error",
+    [
+        RuntimeError("upstream response with private details"),
+        ApiError(
+            status_code=400,
+            headers={
+                "x-request-id": "test-request-id",
+                "authorization": "Bearer private details",
+            },
+            body={"reason": "InvalidFieldValue", "detail": "private details"},
+        ),
+    ],
+)
 def test_start_wraps_sdk_error_with_safe_message(
     settings: BackendSettings,
+    caplog: pytest.LogCaptureFixture,
+    sdk_error: Exception,
 ) -> None:
     client = FakeSDKClient(settings)
-    client.agents.start_error = RuntimeError("upstream response with private details")
+    client.agents.start_error = sdk_error
     service = AgentService(settings, client=client)
 
     with pytest.raises(AgentOperationError, match="Failed to start agent") as error:
@@ -299,3 +318,8 @@ def test_start_wraps_sdk_error_with_safe_message(
             )
         )
     assert "private details" not in str(error.value)
+    assert "private details" not in caplog.text
+    assert error.value.__cause__ is sdk_error
+    if isinstance(sdk_error, ApiError):
+        assert "status_code=400" in caplog.text
+        assert "request_id=test-request-id" in caplog.text

@@ -14,7 +14,7 @@ from typing import Any, Mapping
 
 from agora_agent import Area, AsyncAgora
 from agora_agent.agentkit import Agent, generate_convo_ai_token
-from agora_agent.agentkit.vendors import FengmingSTT, MiniMaxTTS, OpenAI
+from agora_agent.agentkit.vendors import AresSTT, MiniMaxTTS, OpenAI
 
 logger = logging.getLogger("voiceagent.backend")
 
@@ -163,7 +163,7 @@ class AgentService:
         sos_mode = validate_turn_detection_mode(start_of_speech_mode)
         eos_mode = validate_turn_detection_mode(end_of_speech_mode)
 
-        stt = FengmingSTT()
+        stt = AresSTT()
         llm = OpenAI(
             model="gpt-4o-mini",
             system_messages=[
@@ -241,11 +241,14 @@ class AgentService:
             agent_id = await session.start()
         except Exception as exc:
             logger.error(
-                "Agent start failed channel=%s agent_uid=%s user_uid=%s error_type=%s",
+                "Agent start failed channel=%s agent_uid=%s user_uid=%s "
+                "error_type=%s status_code=%s request_id=%s",
                 channel_name,
                 agent_uid,
                 user_uid,
                 type(exc).__name__,
+                getattr(exc, "status_code", None),
+                (getattr(exc, "headers", None) or {}).get("x-request-id"),
             )
             raise AgentOperationError("Failed to start agent") from exc
 
