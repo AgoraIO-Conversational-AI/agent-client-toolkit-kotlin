@@ -2,7 +2,8 @@
 
 This FastAPI service keeps Agora credentials and agent lifecycle operations out
 of the Android APK. It uses `agora-agents>=2.14.0` with explicit Agora Ares
-STT for the global service (`Area.US`), plus managed OpenAI LLM and MiniMax TTS.
+STT for the global service (`Area.US`), plus managed OpenAI LLM and MiniMax TTS
+by default. Cartesia BYOK TTS is optional for demo validation.
 
 The demo uses an overseas Agora project. Keep Ares as the ASR vendor for
 `Area.US`; the Chinese mainland `fengming` vendor cannot be used with it.
@@ -32,9 +33,29 @@ LAN address; it cannot reach a service bound only to the machine's loopback.
 cp server/.env.example server/.env.local
 ```
 
-Set `AGORA_APP_ID` and `AGORA_APP_CERTIFICATE` in `server/.env.local`. The
-managed provider path does not require third-party provider keys. `PORT` is
-optional and defaults to `8000`.
+Set `AGORA_APP_ID` and `AGORA_APP_CERTIFICATE` in `server/.env.local`.
+Keep the Agent configuration copied from `.env.example`; values are read
+directly from the environment without built-in defaults.
+The default `AGENT_TTS_VENDOR=minimax` does not require a third-party key.
+To use Cartesia, set `AGENT_TTS_VENDOR=cartesia` and `CARTESIA_API_KEY`, keeping
+`CARTESIA_VOICE_ID` and `CARTESIA_MODEL_ID` configured in the same file.
+`PORT` is optional and defaults to `8000`.
+
+For custom Agora API routing, optionally set `AGORA_AGENTS_API_BASE_URL` to
+the service origin and any path prefix. The SDK appends
+`/api/conversational-ai-agent` automatically. Set
+`AGORA_AGENTS_SERVICE_NAMESPACE` to add an `X-Service-Namespace` header to
+Agent start and stop requests. Empty values use the default global endpoint
+and omit the namespace header. These settings configure the backend's
+upstream API requests; the Android app still connects to the local backend.
+Restart the backend after changing them.
+
+SDK HTTP debug logging is enabled for this local backend. Its terminal output
+includes the actual request method, URL, headers and JSON body, plus response
+status and headers. The SDK redacts credentials and limits request body logs
+to 2000 characters.
+Agent start failures also log the upstream status, request ID, and redacted
+SDK response body. The HTTP response sent to the app keeps its safe message.
 
 ## Run
 

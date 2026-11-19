@@ -34,7 +34,18 @@ Configure the backend:
 cp server/.env.example server/.env.local
 ```
 
-Set `AGORA_APP_ID` and `AGORA_APP_CERTIFICATE` in `server/.env.local`, then run:
+Set `AGORA_APP_ID` and `AGORA_APP_CERTIFICATE` in `server/.env.local`. Keep the
+Agent settings copied from `.env.example`, including `AGENT_TTS_VENDOR`,
+`AGENT_PROMPT`, `AGENT_GREETING`, and `AGENT_FAILURE_MESSAGE`; the backend reads
+them from env without built-in defaults.
+
+The template selects managed MiniMax with `AGENT_TTS_VENDOR=minimax`. To use
+Cartesia BYOK, set `AGENT_TTS_VENDOR=cartesia` and `CARTESIA_API_KEY`, keeping
+`CARTESIA_VOICE_ID` and `CARTESIA_MODEL_ID` configured in the same file. See
+[backend configuration](./server/README.md#configure) for API routing and logging
+details.
+
+Then run:
 
 ```bash
 ./scripts/start_backend.sh
