@@ -9,12 +9,13 @@ import random
 import re
 import time
 import uuid
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any, Mapping
 
 from agora_agent import Area, AsyncAgora
 from agora_agent.agentkit import Agent, generate_convo_ai_token
-from agora_agent.agentkit.vendors import FengmingSTT, MiniMaxTTS, OpenAI
+from agora_agent.agentkit.debug import redact_secrets
+from agora_agent.agentkit.vendors import AresSTT, CartesiaTTS, MiniMaxTTS, OpenAI
 
 logger = logging.getLogger("voiceagent.backend")
 
@@ -23,13 +24,6 @@ CHANNEL_PATTERN = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
 TURN_DETECTION_MODES = frozenset({"vad", "semantic", "manual"})
 TOKEN_LIFETIME_SECONDS = 24 * 60 * 60
 SDK_REQUEST_TIMEOUT_SECONDS = 25.0
-
-DEFAULT_PROMPT = (
-    "You are a concise, helpful voice assistant. Keep replies short unless the "
-    "user asks for more detail."
-)
-DEFAULT_GREETING = "Hello! How can I help you today?"
-DEFAULT_FAILURE_MESSAGE = "Please wait a moment."
 
 
 class ConfigurationError(ValueError):
@@ -46,14 +40,24 @@ class BackendSettings:
     agora_app_certificate: str
     agent_prompt: str
     agent_greeting: str
+    agent_failure_message: str
+    tts_vendor: str
+    cartesia_api_key: str = field(default="", repr=False)
+    agora_service_namespace: str = ""
+    cartesia_voice_id: str = ""
+    cartesia_model_id: str = ""
 
     @classmethod
     def from_environment(cls, environment: Mapping[str, str] | None = None) -> "BackendSettings":
         values = environment if environment is not None else os.environ
+        tts_vendor = values.get("AGENT_TTS_VENDOR", "").strip().lower()
         required = (
             "AGORA_APP_ID",
             "AGORA_APP_CERTIFICATE",
+            "AGENT_TTS_VENDOR",
         )
+        if tts_vendor == "cartesia":
+            required += ("CARTESIA_API_KEY", "CARTESIA_VOICE_ID", "CARTESIA_MODEL_ID")
         invalid = [
             key
             for key in required
@@ -65,13 +69,24 @@ class BackendSettings:
                 "Missing or placeholder required environment variables: "
                 + ", ".join(invalid)
             )
+        if tts_vendor not in {"minimax", "cartesia"}:
+            raise ConfigurationError(
+                "AGENT_TTS_VENDOR must be one of: minimax, cartesia"
+            )
 
         return cls(
             agora_app_id=values["AGORA_APP_ID"].strip(),
             agora_app_certificate=values["AGORA_APP_CERTIFICATE"].strip(),
-            agent_prompt=values.get("AGENT_PROMPT", "").strip() or DEFAULT_PROMPT,
-            agent_greeting=values.get("AGENT_GREETING", "").strip()
-            or DEFAULT_GREETING,
+            agent_prompt=values.get("AGENT_PROMPT", "").strip(),
+            agent_greeting=values.get("AGENT_GREETING", "").strip(),
+            agent_failure_message=values.get("AGENT_FAILURE_MESSAGE", "").strip(),
+            tts_vendor=tts_vendor,
+            cartesia_api_key=values.get("CARTESIA_API_KEY", "").strip(),
+            agora_service_namespace=values.get(
+                "AGORA_AGENTS_SERVICE_NAMESPACE", ""
+            ).strip(),
+            cartesia_voice_id=values.get("CARTESIA_VOICE_ID", "").strip(),
+            cartesia_model_id=values.get("CARTESIA_MODEL_ID", "").strip(),
         )
 
 
@@ -119,7 +134,11 @@ class AgentService:
             area=Area.US,
             app_id=settings.agora_app_id,
             app_certificate=settings.agora_app_certificate,
+            headers={"X-Service-Namespace": settings.agora_service_namespace}
+            if settings.agora_service_namespace
+            else None,
             timeout=SDK_REQUEST_TIMEOUT_SECONDS,
+            debug=True,
         )
         self._random = random_source or random.SystemRandom()
         self._sessions: dict[str, Any] = {}
@@ -163,14 +182,14 @@ class AgentService:
         sos_mode = validate_turn_detection_mode(start_of_speech_mode)
         eos_mode = validate_turn_detection_mode(end_of_speech_mode)
 
-        stt = FengmingSTT()
+        stt = AresSTT()
         llm = OpenAI(
             model="gpt-4o-mini",
             system_messages=[
                 {"role": "system", "content": self.settings.agent_prompt}
             ],
             greeting_message=self.settings.agent_greeting,
-            failure_message=DEFAULT_FAILURE_MESSAGE,
+            failure_message=self.settings.agent_failure_message,
             max_history=50,
             params={
                 "max_tokens": 1024,
@@ -178,10 +197,18 @@ class AgentService:
                 "top_p": 0.95,
             },
         )
-        tts = MiniMaxTTS(
-            model="speech_2_6_turbo",
-            voice_id="English_captivating_female1",
-        )
+        if self.settings.tts_vendor == "cartesia":
+            tts = CartesiaTTS(
+                credential_mode="byok",
+                api_key=self.settings.cartesia_api_key,
+                voice_id=self.settings.cartesia_voice_id,
+                model_id=self.settings.cartesia_model_id,
+            )
+        else:
+            tts = MiniMaxTTS(
+                model="speech_2_6_turbo",
+                voice_id="English_captivating_female1",
+            )
 
         return (
             Agent(
@@ -241,11 +268,15 @@ class AgentService:
             agent_id = await session.start()
         except Exception as exc:
             logger.error(
-                "Agent start failed channel=%s agent_uid=%s user_uid=%s error_type=%s",
+                "Agent start failed channel=%s agent_uid=%s user_uid=%s "
+                "error_type=%s status_code=%s request_id=%s response_body=%s",
                 channel_name,
                 agent_uid,
                 user_uid,
                 type(exc).__name__,
+                getattr(exc, "status_code", None),
+                (getattr(exc, "headers", None) or {}).get("x-request-id"),
+                redact_secrets(getattr(exc, "body", None)),
             )
             raise AgentOperationError("Failed to start agent") from exc
 

@@ -6,7 +6,7 @@ This repository contains two runtime layers:
 
 - an Android Views/XML voice client using Agora RTC, RTM, and the reusable
   `:conversational-ai` toolkit module
-- a local Python FastAPI backend using `agora-agents==2.4.1`
+- a local Python FastAPI backend using `agora-agents>=2.14.0`
 
 ```text
 Android app -- config/start/stop --> Python FastAPI -- Agora SDK --> ConvoAI
@@ -15,7 +15,7 @@ Android app -- config/start/stop --> Python FastAPI -- Agora SDK --> ConvoAI
 ```
 
 The Android APK owns the realtime client experience. The backend owns App
-Certificate usage, user token generation, managed AI pipeline configuration,
+Certificate usage, user token generation, AI pipeline configuration,
 and runtime Agent lifecycle.
 
 ## Project Structure
@@ -32,7 +32,7 @@ conversational-ai/
 `- src/main/java/io/agora/conversational/api/  # reusable toolkit module
 
 server/
-|- src/agent.py        # AsyncAgora, managed pipeline, session lifecycle
+|- src/agent.py        # AsyncAgora, provider pipeline, session lifecycle
 |- src/server.py       # FastAPI routes and response envelopes
 |- tests/              # mocked SDK/HTTP contract tests
 `- .env.example
@@ -59,8 +59,8 @@ Python owns:
 - Agora App ID and App Certificate
 - unified user RTC+RTM token generation
 - Agent RTC token and Agora REST authentication through `agora-agents`
-- explicit Agora Fengming STT plus managed OpenAI LLM and MiniMax TTS
-  configuration
+- explicit Agora Ares STT plus managed OpenAI LLM and MiniMax TTS by default,
+  with optional Cartesia BYOK TTS
 - independent startup SOS/EOS mapping
 - Agent session start and stateful/stateless stop
 
@@ -162,8 +162,10 @@ Successful `/get_config` responses use `Cache-Control: no-store` so the
 - metrics and error events enabled
 - session credential lifetime of 24 hours
 
-The pipeline explicitly uses Agora Fengming STT, managed OpenAI `gpt-4o-mini`,
-and MiniMax `speech_2_6_turbo` / `English_captivating_female1`.
+The pipeline explicitly uses Agora Ares STT for the global service (`Area.US`),
+managed OpenAI `gpt-4o-mini`, and managed MiniMax TTS by default. Set
+`AGENT_TTS_VENDOR=cartesia` to use Cartesia BYOK for validation; its key stays
+in Git-ignored `server/.env.local`.
 
 The backend configures `AsyncAgora` with a 25-second request timeout, below the
 Android client's 30-second read timeout. The backend must report SDK success or

@@ -2,11 +2,15 @@ from __future__ import annotations
 
 import asyncio
 import random
+from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
 
 import pytest
+from agora_agent import Area
 from agora_agent.agentkit import Agent
+from agora_agent.core.api_error import ApiError
+from dotenv import dotenv_values
 
 import src.agent as agent_module
 from src.agent import (
@@ -14,8 +18,6 @@ from src.agent import (
     AgentService,
     BackendSettings,
     ConfigurationError,
-    DEFAULT_GREETING,
-    DEFAULT_PROMPT,
     MAX_RTC_UID,
     SDK_REQUEST_TIMEOUT_SECONDS,
     TOKEN_LIFETIME_SECONDS,
@@ -24,12 +26,20 @@ from src.agent import (
 
 
 def valid_environment() -> dict[str, str]:
-    return {
-        "AGORA_APP_ID": "0" * 32,
-        "AGORA_APP_CERTIFICATE": "1" * 32,
-        "AGENT_PROMPT": "Test system prompt",
-        "AGENT_GREETING": "Test greeting",
+    environment = {
+        name: value or ""
+        for name, value in dotenv_values(
+            Path(__file__).resolve().parents[1] / ".env.example"
+        ).items()
     }
+    environment.update(
+        AGORA_APP_ID="0" * 32,
+        AGORA_APP_CERTIFICATE="1" * 32,
+        AGENT_PROMPT="Test system prompt",
+        AGENT_GREETING="Test greeting",
+        AGENT_FAILURE_MESSAGE="Test failure message",
+    )
+    return environment
 
 
 class FakeAgentsClient:
@@ -88,6 +98,72 @@ def test_settings_require_agora_credentials() -> None:
         BackendSettings.from_environment(environment)
 
 
+@pytest.mark.parametrize(
+    "name", ["CARTESIA_API_KEY", "CARTESIA_VOICE_ID", "CARTESIA_MODEL_ID"]
+)
+@pytest.mark.parametrize("value", [None, "", " ", "your_cartesia_value"])
+def test_settings_require_selected_cartesia_configuration(
+    name: str, value: str | None
+) -> None:
+    environment = valid_environment()
+    environment.update(AGENT_TTS_VENDOR="cartesia", CARTESIA_API_KEY="test-cartesia-api-key")
+    if value is None:
+        environment.pop(name, None)
+    else:
+        environment[name] = value
+
+    with pytest.raises(ConfigurationError, match=name):
+        BackendSettings.from_environment(environment)
+
+
+@pytest.mark.parametrize("vendor", [None, "", " ", "unsupported"])
+def test_settings_reject_missing_or_unknown_tts_vendor(vendor: str | None) -> None:
+    environment = valid_environment()
+    if vendor is None:
+        environment.pop("AGENT_TTS_VENDOR")
+    else:
+        environment["AGENT_TTS_VENDOR"] = vendor
+
+    with pytest.raises(ConfigurationError, match="AGENT_TTS_VENDOR"):
+        BackendSettings.from_environment(environment)
+
+
+@pytest.mark.parametrize(
+    ("vendor", "api_key"),
+    [
+        (None, None),
+        ("minimax", ""),
+        (" minimax ", "your_cartesia_api_key"),
+        ("MINIMAX", "unused-cartesia-key"),
+    ],
+)
+def test_default_minimax_starts_without_cartesia_credentials(
+    vendor: str | None, api_key: str | None
+) -> None:
+    environment = valid_environment()
+    environment.pop("CARTESIA_VOICE_ID")
+    environment.pop("CARTESIA_MODEL_ID")
+    if vendor is not None:
+        environment["AGENT_TTS_VENDOR"] = vendor
+    if api_key is not None:
+        environment["CARTESIA_API_KEY"] = api_key
+    settings = BackendSettings.from_environment(environment)
+    client = FakeSDKClient(settings)
+    service = AgentService(settings, client=client)
+
+    assert asyncio.run(
+        service.start_agent("channel-test", 98765432, 123456, "vad", "vad")
+    ) == "agent-123"
+
+    start_call = client.agents.start_calls[0]
+    properties = dump_model(start_call["properties"])
+    assert start_call["preset"] == "openai_gpt_4o_mini,minimax_speech_2_6_turbo"
+    assert properties["tts"] == {
+        "vendor": "minimax",
+        "params": {"voice_setting": {"voice_id": "English_captivating_female1"}},
+    }
+
+
 def test_settings_reject_example_placeholders() -> None:
     with pytest.raises(ConfigurationError, match="AGORA_APP_ID"):
         BackendSettings.from_environment(
@@ -98,16 +174,53 @@ def test_settings_reject_example_placeholders() -> None:
         )
 
 
-def test_settings_use_optional_agent_copy_and_defaults() -> None:
-    configured = BackendSettings.from_environment(valid_environment())
+def test_settings_read_agent_copy_from_environment() -> None:
+    environment = valid_environment()
+    configured = BackendSettings.from_environment(environment)
     assert configured.agent_prompt == "Test system prompt"
     assert configured.agent_greeting == "Test greeting"
 
-    defaults = BackendSettings.from_environment(
-        {"AGORA_APP_ID": "0" * 32, "AGORA_APP_CERTIFICATE": "1" * 32}
+    assert configured.agent_failure_message == "Test failure message"
+    assert configured.tts_vendor == environment["AGENT_TTS_VENDOR"]
+    assert configured.cartesia_voice_id == environment["CARTESIA_VOICE_ID"]
+    assert configured.cartesia_model_id == environment["CARTESIA_MODEL_ID"]
+
+    for name in ("AGENT_PROMPT", "AGENT_GREETING", "AGENT_FAILURE_MESSAGE"):
+        environment.pop(name)
+    unconfigured = BackendSettings.from_environment(environment)
+    assert unconfigured.agent_prompt == ""
+    assert unconfigured.agent_greeting == ""
+    assert unconfigured.agent_failure_message == ""
+
+
+@pytest.mark.parametrize(
+    ("voice_id", "model_id"),
+    [(None, None), (" custom-voice ", " sonic-2 ")],
+)
+def test_cartesia_byok_environment_overrides(
+    voice_id: str | None, model_id: str | None
+) -> None:
+    environment = valid_environment()
+    environment.update(
+        AGENT_TTS_VENDOR=" Cartesia ",
+        CARTESIA_API_KEY="test-cartesia-api-key",
     )
-    assert defaults.agent_prompt == DEFAULT_PROMPT
-    assert defaults.agent_greeting == DEFAULT_GREETING
+    if voice_id is not None:
+        environment["CARTESIA_VOICE_ID"] = voice_id
+    if model_id is not None:
+        environment["CARTESIA_MODEL_ID"] = model_id
+    settings = BackendSettings.from_environment(environment)
+    service = AgentService(settings, client=FakeSDKClient(settings))
+
+    assert service.build_agent("vad", "semantic").config["tts"] == {
+        "vendor": "cartesia",
+        "credential_mode": "byok",
+        "params": {
+            "api_key": "test-cartesia-api-key",
+            "model_id": environment["CARTESIA_MODEL_ID"].strip(),
+            "voice": {"mode": "id", "id": environment["CARTESIA_VOICE_ID"].strip()},
+        },
+    }
 
 
 def test_numeric_uid_range_is_shared_with_android() -> None:
@@ -127,6 +240,7 @@ def test_sdk_timeout_finishes_before_mobile_timeout(
     monkeypatch.setattr(agent_module, "AsyncAgora", fake_async_agora)
     AgentService(settings)
 
+    assert captured["area"] is Area.US
     assert captured["timeout"] == SDK_REQUEST_TIMEOUT_SECONDS
     assert SDK_REQUEST_TIMEOUT_SECONDS < 30
 
@@ -176,9 +290,17 @@ def test_get_config_replaces_invalid_channel_and_uid(settings: BackendSettings) 
     assert config.token.startswith("007")
 
 
-def test_start_builds_managed_pipeline_and_turn_modes(
-    settings: BackendSettings, monkeypatch: pytest.MonkeyPatch
+@pytest.mark.parametrize(
+    "cartesia_api_key", ["test-cartesia-api-key", " second-cartesia-api-key "]
+)
+def test_start_builds_byok_pipeline_and_turn_modes(
+    monkeypatch: pytest.MonkeyPatch,
+    cartesia_api_key: str,
 ) -> None:
+    environment = valid_environment()
+    environment.update(AGENT_TTS_VENDOR="cartesia", CARTESIA_API_KEY=cartesia_api_key)
+    settings = BackendSettings.from_environment(environment)
+    assert settings.cartesia_api_key not in repr(settings)
     client = FakeSDKClient(settings)
     service = AgentService(settings, client=client)
     session_options: dict[str, Any] = {}
@@ -218,9 +340,23 @@ def test_start_builds_managed_pipeline_and_turn_modes(
     assert properties["parameters"]["data_channel"] == "rtm"
     assert properties["parameters"]["enable_metrics"] is True
     assert properties["parameters"]["enable_error_message"] is True
-    assert properties["asr"] == {"vendor": "fengming", "language": "en-US"}
+    assert properties["asr"] == {"vendor": "ares", "language": "en-US"}
+    assert client.agents.start_calls[0]["preset"] == "openai_gpt_4o_mini"
     assert "api_key" not in properties["llm"]
-    assert "key" not in properties["tts"]["params"]
+    assert properties["llm"]["system_messages"] == [
+        {"role": "system", "content": settings.agent_prompt}
+    ]
+    assert properties["llm"]["greeting_message"] == settings.agent_greeting
+    assert properties["llm"]["failure_message"] == settings.agent_failure_message
+    assert properties["tts"] == {
+        "vendor": "cartesia",
+        "credential_mode": "byok",
+        "params": {
+            "api_key": cartesia_api_key.strip(),
+            "model_id": settings.cartesia_model_id,
+            "voice": {"mode": "id", "id": settings.cartesia_voice_id},
+        },
+    }
 
 
 def test_start_rejects_invalid_turn_mode_before_network(
@@ -285,11 +421,32 @@ def test_stop_treats_not_found_as_idempotent(settings: BackendSettings) -> None:
     asyncio.run(service.stop_agent("expired-agent"))
 
 
+@pytest.mark.parametrize(
+    "sdk_error",
+    [
+        RuntimeError("upstream response with private details"),
+        ApiError(
+            status_code=400,
+            headers={
+                "x-request-id": "test-request-id",
+                "authorization": "Bearer private details",
+            },
+            body={
+                "reason": "InvalidFieldValue",
+                "detail": "Unsupported field value",
+                "api_key": "private details",
+                "nested": {"token": "private details"},
+            },
+        ),
+    ],
+)
 def test_start_wraps_sdk_error_with_safe_message(
     settings: BackendSettings,
+    caplog: pytest.LogCaptureFixture,
+    sdk_error: Exception,
 ) -> None:
     client = FakeSDKClient(settings)
-    client.agents.start_error = RuntimeError("upstream response with private details")
+    client.agents.start_error = sdk_error
     service = AgentService(settings, client=client)
 
     with pytest.raises(AgentOperationError, match="Failed to start agent") as error:
@@ -299,3 +456,12 @@ def test_start_wraps_sdk_error_with_safe_message(
             )
         )
     assert "private details" not in str(error.value)
+    assert "private details" not in caplog.text
+    assert error.value.__cause__ is sdk_error
+    if isinstance(sdk_error, ApiError):
+        assert "status_code=400" in caplog.text
+        assert "request_id=test-request-id" in caplog.text
+        assert "response_body=" in caplog.text
+        assert "InvalidFieldValue" in caplog.text
+        assert "Unsupported field value" in caplog.text
+        assert "[REDACTED]" in caplog.text

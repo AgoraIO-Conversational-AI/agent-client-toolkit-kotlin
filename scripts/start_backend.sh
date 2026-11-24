@@ -81,9 +81,7 @@ if [[ ! -x "$VENV_DIR/bin/python" ]]; then
     python3 -m venv "$VENV_DIR"
 fi
 
-if ! "$VENV_DIR/bin/python" -c 'from importlib.metadata import version; import fastapi, uvicorn; assert version("agora-agents") == "2.4.1"' >/dev/null 2>&1; then
-    "$VENV_DIR/bin/pip" install -r "$SERVER_DIR/requirements.txt"
-fi
+"$VENV_DIR/bin/python" -m pip install -r "$SERVER_DIR/requirements.txt"
 
 echo "Starting FastAPI on 0.0.0.0:$PORT"
 

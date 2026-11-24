@@ -4,6 +4,14 @@ All notable changes to the Android Agora Conversational AI Toolkit will be docum
 
 The format follows Keep a Changelog style. This first public release establishes the compatibility baseline for future Android releases.
 
+## [2.11.0] - 2026-11-24
+
+### Fixed
+
+- Word render mode no longer drops a word whose `start_ms` equals an already
+  kept word with different text, such as a zero-duration word rounded by
+  Cartesia TTS. Duplicates are now identified by word text plus `start_ms`.
+
 ## [2.10.1] - Unreleased
 
 ### Changed

@@ -609,16 +609,8 @@ internal class TranscriptController(private val config: TranscriptConfig) : IRtc
                     val useNewData = startMs >= existingInfo.startMs
 
                     // Merge words and sort by timestamp
-                    val mergedWords = existingInfo.words.toMutableList()
-
-                    newWords.forEach { newWord ->
-                        // Check if a word with the same startMs already exists
-                        if (existingInfo.words.none { it.startMs == newWord.startMs }) {
-                            mergedWords.add(newWord)
-                        }
-                    }
-
-                    val sortedMergedWords = mergedWords.sortedBy { it.startMs }.toList()
+                    val sortedMergedWords =
+                        TranscriptWordMerge.merge(existingInfo.words, newWords, { it.word }, { it.startMs })
 
                     // Traverse sortedMergedWords, set the status of the word after the first Interrupted word to Interrupted
                     var foundInterrupted = false

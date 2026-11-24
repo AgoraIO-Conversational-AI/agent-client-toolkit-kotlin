@@ -11,14 +11,14 @@ This is a complete, runnable Android demo for real-time voice conversation with 
 
 The Android app does not call Agora Conversational AI REST endpoints directly.
 It calls the local FastAPI service through `AgentBackendClient`; the service
-uses `agora-agents==2.4.1` for token generation and agent lifecycle operations.
+uses `agora-agents>=2.14.0` for token generation and agent lifecycle operations.
 
-Current managed pipeline in `server/src/agent.py`:
+Current demo validation pipeline in `server/src/agent.py`:
 
-- STT: Agora Fengming, configured explicitly
+- STT: Agora Ares, matching the global service selected by `Area.US`
 - LLM: OpenAI `gpt-4o-mini`
-- TTS: MiniMax `speech_2_6_turbo` with `English_captivating_female1`
-- no third-party provider keys are required for the managed path
+- TTS: managed MiniMax by default; select Cartesia BYOK with
+  `AGENT_TTS_VENDOR=cartesia` and a key in Git-ignored `server/.env.local`
 
 Turn detection remains a startup-time client choice:
 
@@ -63,7 +63,7 @@ Current quickstart scope is limited to voice session startup, independent startu
 | RTM SDK | Agora RTM SDK (`io.agora:agora-rtm-lite:2.2.3`) |
 | Coroutines | Kotlin Coroutines 1.9.0 |
 | ConversationalAIAPI | Standalone `:conversational-ai` Gradle module |
-| Backend | Python FastAPI + `agora-agents==2.4.1` |
+| Backend | Python FastAPI + `agora-agents>=2.14.0` |
 
 For runtime structure, see `ARCHITECTURE.md`. For entry files, see `README.md`.
 
@@ -98,7 +98,7 @@ For runtime structure, see `ARCHITECTURE.md`. For entry files, see `README.md`.
 ### Python Backend
 
 - `server/src/server.py` exposes `/health`, `/get_config`, `/startAgent`, and `/stopAgent`
-- `server/src/agent.py` owns the `AsyncAgora` client, managed provider pipeline,
+- `server/src/agent.py` owns the `AsyncAgora` client, provider pipeline,
   SDK sessions, and stateful/stateless stop paths
 - FastAPI lifespan stops every tracked Agent before the local backend exits
 - issues user RTC+RTM tokens with a 24-hour lifetime for this local demo
@@ -167,8 +167,13 @@ Backend fields:
 |-------|----------|---------|
 | `AGORA_APP_ID` | yes | Agora project App ID |
 | `AGORA_APP_CERTIFICATE` | yes | Server-only token and SDK authentication |
+| `AGENT_TTS_VENDOR` | yes | `minimax` in the env template, or `cartesia` |
+| `CARTESIA_API_KEY` | for Cartesia | Server-only Cartesia BYOK credential |
+| `CARTESIA_VOICE_ID` | for Cartesia | Voice ID from the env file |
+| `CARTESIA_MODEL_ID` | for Cartesia | Model ID from the env file |
 | `AGENT_PROMPT` | no | Agent system prompt |
 | `AGENT_GREETING` | no | Initial greeting |
+| `AGENT_FAILURE_MESSAGE` | no | LLM failure message |
 | `PORT` | no | Local FastAPI port, default `8000` |
 
 Android has one local value: `agent.backend.url` in the root
@@ -243,7 +248,7 @@ User Action → ViewModel → Agora SDK (RTC/RTM)
 
 ## How to Change Request Parameters
 
-Change managed pipeline and SDK session properties in `server/src/agent.py`.
+Change the provider pipeline and SDK session properties in `server/src/agent.py`.
 Change HTTP route models and envelopes in `server/src/server.py`. Keep Android,
 Python tests, and all contract documents synchronized.
 
