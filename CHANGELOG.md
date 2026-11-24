@@ -4,7 +4,7 @@ All notable changes to the Android Agora Conversational AI Toolkit will be docum
 
 The format follows Keep a Changelog style. This first public release establishes the compatibility baseline for future Android releases.
 
-## [2.11.0] - Unreleased
+## [2.11.0] - 2026-11-24
 
 ### Fixed
 
